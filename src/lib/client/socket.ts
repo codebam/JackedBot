@@ -29,6 +29,13 @@ export interface SocketHandlers {
   onAck?: (msg: Extract<ServerMessage, { t: 'ack' }>) => void;
   onPong?: (msg: Extract<ServerMessage, { t: 'pong' }>) => void;
   onStatus?: (s: ConnectionStatus, detail?: string) => void;
+  /**
+   * Arrived from an invite link: redeem membership before asking for a ticket.
+   * A private table's mint 403s until a table_members row exists, so the order
+   * matters - and it belongs here because ensureTicket() is the one place a ticket
+   * is minted, including on every reconnect and TTL refresh.
+   */
+  invite?: boolean;
 }
 
 export type ConnectionStatus = 'connecting' | 'open' | 'reconnecting' | 'auth-failed' | 'closed' | 'error';
@@ -140,6 +147,11 @@ export class TableSocket {
     const ageOk = Date.now() - this.ticketAgeMs < (this.ticketTtlSec - 10) * 1000;
     if (this.ticket && ageOk) return true;
     try {
+      if (this.handlers.invite) {
+        // Best effort: if this player is already enrolled the route is a no-op, and
+        // if it fails the mint below reports the real reason (NOT_A_MEMBER).
+        await api(`/api/tables/${encodeURIComponent(this.tableId)}/join`, { method: 'POST', body: { invite: true } }).catch(() => undefined);
+      }
       const r = await api<{ url: string; ticket: string; expiresInSeconds: number }>(`/api/tables/${encodeURIComponent(this.tableId)}/socket`, {
         method: 'POST',
         body: {},

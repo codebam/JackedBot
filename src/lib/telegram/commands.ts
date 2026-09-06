@@ -22,6 +22,7 @@ export const BOT_COMMANDS = [
   { command: 'buy', description: 'Buy $10 of play money with 1 Star' },
   { command: 'history', description: 'Your last hands' },
   { command: 'tables', description: 'List open tables' },
+  { command: 'newtable', description: 'Create a private table and invite people to it' },
 ] as const;
 
 export const ADMIN_COMMANDS = [
@@ -188,6 +189,36 @@ export async function cmdTables(c: CommandContext): Promise<void> {
   await c.bot.sendMessage(c.message.chat.id, `<b>Open tables</b>\nPlay money only — ${esc(formatCents(c.cfg.rules.starsToCentsPerStar))} per Star.`, {
     reply_markup: { inline_keyboard: rows.map((r) => [r]) },
   });
+}
+
+// ---------------------------------------------------------------------------
+// private tables
+// ---------------------------------------------------------------------------
+/**
+ * /newtable — the entry point for an invite-only game night.
+ *
+ * The bot does not create the table itself. "Full control" stakes means six fields
+ * with relationships between them, and a chat has no form: the Mini App does. So
+ * this message is a door, not a transaction - which also keeps validation in one
+ * place (`POST /api/tables`) instead of a second parser here that could drift.
+ */
+export async function cmdNewTable(c: CommandContext): Promise<void> {
+  await bootstrapUser(c.env, c.cfg, c.user);
+  await c.bot.sendMessage(
+    c.message.chat.id,
+    [
+      '<b>Create a private table</b>',
+      'Pick your own blinds, buy-in and seats. It is unlisted - nobody finds it in the lobby.',
+      '',
+      'After creating it:',
+      '1. Go to your group chat and type <code>@JackedBot</code>',
+      '2. Choose the table from the picker',
+      '3. Telegram posts a Join button into the chat',
+      '',
+      'Whoever taps that button can sit. Chips are play money and there is no cashout.',
+    ].join('\n'),
+    { reply_markup: { inline_keyboard: [[{ text: 'Create private table', web_app: { url: webAppUrl(c.cfg, '/new-table') } }]] } },
+  );
 }
 
 // ---------------------------------------------------------------------------

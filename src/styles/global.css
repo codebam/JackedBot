@@ -1494,3 +1494,53 @@ code {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Private-table creation: the stakes form and the owner's unlisted felt.
+   Same felt palette as the lobby; these exist because nothing here previously
+   needed a text input, so there was no field styling to reuse.
+   --------------------------------------------------------------------------- */
+.lobby__create {
+  margin: 18px 0 4px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.form__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.form__field {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 92px;
+  font-size: 0.78rem;
+  color: var(--muted, #9db3a8);
+}
+
+.form__field--sm {
+  flex: 0 0 74px;
+}
+
+.form__field input,
+.form__field select {
+  background: rgba(6, 20, 14, 0.75);
+  border: 1px solid rgba(216, 180, 90, 0.28);
+  border-radius: 10px;
+  color: var(--ink, #f2efe6);
+  font: inherit;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.form__field input:focus-visible,
+.form__field select:focus-visible {
+  border-color: var(--gold, #d8b45a);
+  outline: none;
+}

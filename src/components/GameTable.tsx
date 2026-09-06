@@ -18,6 +18,8 @@ import type { EventData, EventKind, PlayerAction, PublicRules, ServerMessage, Ta
 
 export interface GameTableProps {
   tableId: string;
+  /** Set when the URL carried ?invite= — redeems membership before the ticket mint. */
+  redeemInvite?: boolean;
   initialState?: TableView | null;
   initialYou?: YouView | null;
   initialRules?: PublicRules | null;
@@ -40,7 +42,7 @@ const PHASE_LABEL: Record<string, string> = {
   IDLE: 'Table closed',
 };
 
-export function GameTable({ tableId, initialState = null, initialYou = null, initialRules = null, houseWarning }: GameTableProps) {
+export function GameTable({ tableId, initialState = null, initialYou = null, initialRules = null, houseWarning, redeemInvite = false }: GameTableProps) {
   const [state, setState] = useState<TableView | null>(initialState);
   const [you, setYou] = useState<YouView | null>(initialYou);
   const [rules] = useState<PublicRules | null>(initialRules);
@@ -66,6 +68,7 @@ export function GameTable({ tableId, initialState = null, initialYou = null, ini
     setViewportVars();
 
     const sock = new TableSocket(tableId, {
+      invite: redeemInvite,
       onState: (s, y) => {
         setState(s);
         setYou(y);
@@ -90,7 +93,7 @@ export function GameTable({ tableId, initialState = null, initialYou = null, ini
       socketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableId]);
+  }, [tableId, redeemInvite]);
 
   const handleEvent = useCallback(
     (kind: EventKind, data: EventData) => {

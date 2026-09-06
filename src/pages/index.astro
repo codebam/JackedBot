@@ -10,6 +10,7 @@ import { normalizeInitData } from '../lib/auth.ts';
 import { validateInitData } from '../lib/telegram/initData.ts';
 import { bootstrapUser } from '../lib/telegram/session.ts';
 import { ensureDefaultTables, listLobbyTables } from '../lib/db/tablesRepo.ts';
+import { listShareableTables, type PrivateTableSummary } from '../lib/db/privateTables.ts';
 import { formatCents } from '../shared/money.ts';
 import type { LobbyTable } from '../shared/protocol.ts';
 
@@ -19,8 +20,8 @@ const cfg = getConfig(env as unknown as Env, Astro.request.url);
 // preview lobby, and every privileged action still requires verified initData.
 const rawInit = normalizeInitData(Astro.url.searchParams.get('tgWebAppData') ?? (Astro.request.headers.get('x-telegram-init-data') ?? ''));
 let tables: LobbyTable[] = [];
+let privateTables: PrivateTableSummary[] = [];
 let me: { userId: number; name: string; bankrollCents: number; ageAccepted: boolean; welcomeGranted: boolean } | null = null;
-let authNote: string | null = null;
 
 try {
   const check = rawInit ? await validateInitData(rawInit, { botToken: cfg.botToken, maxAgeSeconds: cfg.initDataMaxAgeSeconds }) : null;
@@ -33,13 +34,21 @@ try {
       ageAccepted: boot.ageAccepted,
       welcomeGranted: boot.welcomeGranted,
     };
+    // Own/private felt comes from membership, never from the public listing - a
+    // stranger browsing the lobby must not see someone's game night.
+    privateTables = await listShareableTables(env.DB, me.userId);
   } else {
-    authNote = check ? `Session check failed (${check.reason}). Open this page inside Telegram to play.` : 'Open this page inside Telegram to play.';
+    // No notice here. authNote was dead since 5f6e07b, and every string it built told
+    // people already inside Telegram to open the page inside Telegram, because SSR
+    // cannot see initData. SessionGate owns that state.
   }
   await ensureDefaultTables(env.DB);
   tables = await listLobbyTables(env.DB);
 } catch (e) {
-  authNote = `Lobby unavailable: ${(e as Error).message}`;
+  // Logged, not rendered. There is no SSR-authored banner on this page any more
+  // (see 5f6e07b): SessionGate reports what the client actually knows, and a
+  // server-side "open inside Telegram" line was always a lie to real players.
+  console.error('lobby SSR preview failed', (e as Error).message);
 }
 
 const starsLabel = formatCents(cfg.centsPerStar);
@@ -157,6 +166,36 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
           </ul>
         )
       }
+    </section>
+
+    {
+      privateTables.length > 0 ? (
+        <section class="lobby">
+          <h2 class="lobby__h2">Your private tables</h2>
+          <p class="lobby__sub">Unlisted. Share them by typing @JackedBot in a group chat.</p>
+          <ul class="tcards">
+            {privateTables.map((t) => (
+              <li class="tcard">
+                <div class="tcard__top">
+                  <b>{t.name}</b>
+                  <span class="badge">{t.role === 'owner' ? 'yours' : 'invited'}</span>
+                </div>
+                <p class="lobby__fine">
+                  {formatCents(t.minBetCents)}–{formatCents(t.maxBetCents)} · {t.activeSeats}/{t.seatCount} seated
+                </p>
+                <a class="btn btn--primary tcard__cta" href={`/table/${t.id}?invite=1`}>
+                  Open table
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null
+    }
+
+    <section class="lobby__create">
+      <a class="btn btn--gold btn--block" href="/new-table">Create a private table</a>
+      <p class="lobby__fine">Your own blinds, buy-in and seats. Invite people with @JackedBot in any group.</p>
     </section>
 
     <section class="lobby__how">

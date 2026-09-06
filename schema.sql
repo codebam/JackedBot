@@ -345,3 +345,23 @@ SELECT u.telegram_user_id AS user_id,
   LEFT JOIN user_stats s ON s.user_id = u.telegram_user_id
  WHERE u.banned_at IS NULL
  ORDER BY u.bankroll_cents DESC;
+
+-- ---------------------------------------------------------------------------
+-- Private table membership.
+--
+-- `tables.is_public = 0` means "unlisted AND invite-only", not "locked": the slug
+-- of a private table is generated from 128 bits of entropy and never appears in a
+-- lobby, so the link itself is the capability. Opening it enrolls the player here
+-- (see src/lib/db/privateTables.ts), and the Table DO refuses to seat anybody who
+-- has no row. `owner` is just a role marker on the same table; the creator is
+-- enrolled at creation so they can always rejoin their own felt.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS table_members (
+  table_id   TEXT    NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(telegram_user_id) ON DELETE CASCADE,
+  role       TEXT    NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+  joined_at  TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  PRIMARY KEY (table_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_table_members_user ON table_members(user_id, table_id, role);

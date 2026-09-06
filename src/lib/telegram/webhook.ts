@@ -16,7 +16,8 @@ import { getConfig, type AppConfig } from '../config.ts';
 import { creditBuyIn } from '../db/payments.ts';
 import { getUser } from '../db/users.ts';
 import { TelegramApiError, type PreCheckoutQuery, type TelegramBot, type Update } from './api.ts';
-import { BOT_COMMANDS, cmdBalance, cmdBuy, cmdHelp, cmdHistory, cmdRefund, cmdStart, cmdTables, handleCallback } from './commands.ts';
+import { BOT_COMMANDS, cmdBalance, cmdBuy, cmdHelp, cmdHistory, cmdNewTable, cmdRefund, cmdStart, cmdTables, handleCallback } from './commands.ts';
+import { handleInlineQuery } from './inline.ts';
 import type { TelegramWebAppUser } from './initData.ts';
 
 export interface WebhookDeps {
@@ -152,6 +153,9 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
       case '/refund':
         await cmdRefund(common, arg);
         return { handled: '/refund' };
+      case '/newtable':
+        await cmdNewTable(common);
+        return { handled: '/newtable' };
       case '/commands':
         await bot.setMyCommands([...BOT_COMMANDS]);
         await bot.sendMessage(message.chat.id, 'Command list re-registered with Telegram.');
@@ -165,6 +169,13 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
         await cmdStart(common);
         return { handled: 'free_text' };
     }
+  }
+
+  // ------------------------------------------------------------------- inline
+  // `@JackedBot` typed in any chat. Must be answered or the player stares at a
+  // spinner, and requires `inline_query` in allowed_updates to arrive at all.
+  if (update.inline_query) {
+    return handleInlineQuery(update.inline_query, { env: deps.env, cfg, bot });
   }
 
   // ------------------------------------------------------------------ callback

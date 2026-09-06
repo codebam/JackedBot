@@ -55,6 +55,16 @@ if (WHAT.startsWith('callback:')) {
       message: { message_id: 1, date: NOW, chat, from, text: 'x' },
     },
   };
+} else if (WHAT.startsWith('inline:')) {
+  update = {
+    inline_query: {
+      id: `probe-${NOW}`,
+      from: USER_ID ? { ...from, id: USER_ID } : from,
+      query: WHAT.slice('inline:'.length),
+      offset: '',
+      chat_type: 'group',
+    },
+  };
 } else if (WHAT === 'precheckout') {
   update = {
     pre_checkout_query: { id: 'pq-synthetic', from, currency: 'XTR', total_amount: 1, invoice_payload: `buyin:${USER_ID}:probe` },

@@ -11,7 +11,7 @@ import { env } from 'cloudflare:workers';
 import { AuthError, requireUser } from '../../../../lib/auth.ts';
 import { authResponse, err, ok, parseTableId } from '../../../../lib/http.ts';
 import { mintSocketTicket } from '../../../../lib/table-client.ts';
-import { getTableConfig } from '../../../../lib/db/tablesRepo.ts';
+import { resolveTableAccess } from '../../../../lib/table-access.ts';
 import { hasAcceptedAge } from '../../../../lib/db/users.ts';
 import { WS_PREFIX } from '../../../../shared/routes.ts';
 import type { APIContext } from 'astro';
@@ -34,10 +34,12 @@ export async function POST(context: APIContext<{ id: string }>): Promise<Respons
 
   if (!hasAcceptedAge(auth.user)) return err('AGE_GATE_REQUIRED', 'Confirm you are 18 or over to play.', 428);
 
-  const cfg = await getTableConfig(env.DB, tableId);
-  if (!cfg) return err('TABLE_NOT_FOUND', 'That table does not exist.', 404);
-  if (cfg.status === 'closed') return err('TABLE_CLOSED', 'That table is closed.', 410);
-  if (!cfg.isPublic) return err('TABLE_PRIVATE', 'That table is private.', 403);
+  // Was four hand-rolled checks, including `if (!cfg.isPublic) 403` for everyone -
+  // the shape that made a private table unjoinable by its own creator. One shared
+  // gate now covers existence, closure and membership identically in this route and
+  // in the HTTP action fallback, which checked none of them.
+  const access = await resolveTableAccess(env.DB, tableId, auth.user.telegram_user_id);
+  if (!access.ok) return err(access.code, access.message, access.status);
 
   const { ticket, expiresInSeconds } = await mintSocketTicket(env as unknown as Env, tableId, auth.user.telegram_user_id);
 

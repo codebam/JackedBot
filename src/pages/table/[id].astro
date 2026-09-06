@@ -3,6 +3,12 @@
 // visitor has valid initData, so the first paint shows actual cards and an actual
 // countdown; the Preact island then takes over from the WebSocket.
 import Base from '../../layouts/Base.astro';
+// The `redeemInvite` prop below must stay a plain expression: a /* */ comment written
+// inside an Astro component's attribute list is not treated as a comment at all, it is
+// parsed as extra props (which silently turns prose into boolean attributes).
+// ?invite= is genuine SSR knowledge, unlike identity: it is in the URL, and it has to
+// reach the island because a private table's ticket mint 403s until a table_members
+// row exists.
 import { GameTable } from '../../components/GameTable.tsx';
 import { SessionGate } from '../../components/SessionGate.tsx';
 import { env } from 'cloudflare:workers';
@@ -82,6 +88,7 @@ if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
         <GameTable
           client:load
           tableId={tableId}
+          redeemInvite={Astro.url.searchParams.has('invite')}
           initialState={initialTable}
           initialYou={initialYou}
           initialRules={publicRules()}

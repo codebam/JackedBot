@@ -22,7 +22,7 @@ function TABLE_NS(): DurableObjectNamespace {
 }
 
 /** The D1 handle from the test Worker's bindings. */
-const db = (): D1Database => (env as unknown as { DB: D1Database }).DB;
+export const db = (): D1Database => (env as unknown as { DB: D1Database }).DB;
 
 let ready: Promise<void> | null = null;
 

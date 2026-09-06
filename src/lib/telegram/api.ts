@@ -85,12 +85,39 @@ export interface CallbackQuery {
   chat_instance?: string;
 }
 
+/**
+ * An inline mode query: the player typed `@JackedBot ` in some chat. Delivered to
+ * the same webhook, so `allowed_updates` must list `inline_query` or Telegram
+ * silently never sends these - the failure looks exactly like inline mode being
+ * broken, with no error anywhere.
+ */
+export interface InlineQuery {
+  id: string;
+  from: TgUser;
+  query: string;
+  /** Where the mention happened. `group` is the case this feature exists for. */
+  chat_type?: 'sender' | 'private' | 'group' | 'channel';
+  offset?: string;
+}
+
+/** One row of the picker. Only `article` is used: a game must open our WebApp. */
+export interface InlineQueryResult {
+  type: 'article';
+  /** <=64 chars, unique per response. */
+  id: string;
+  title: string;
+  description: string;
+  input_message_content: { message_text: string; parse_mode?: string; disable_web_page_preview?: boolean };
+  reply_markup?: InlineKeyboardMarkup;
+}
+
 export interface Update {
   update_id: number;
   message?: Message;
   edited_message?: Message;
   callback_query?: CallbackQuery;
   pre_checkout_query?: PreCheckoutQuery;
+  inline_query?: InlineQuery;
 }
 
 export class TelegramApiError extends Error {
@@ -177,7 +204,9 @@ export class TelegramBot {
       secret_token: secretToken,
       // Only what we consume; leaving this unset means "everything", which burns
       // webhook throughput on chat-member and reactions updates we ignore.
-      allowed_updates: ['message', 'callback_query', 'pre_checkout_query', 'edited_message'],
+      // Must stay identical to scripts/set-webhook.mjs, which is what actually runs
+      // in deployment. tests/unit/inline-mode.test.ts asserts the two cannot drift.
+      allowed_updates: ['message', 'callback_query', 'pre_checkout_query', 'edited_message', 'inline_query'],
       drop_pending_updates: false,
       max_connections: 40,
       ip_address: '',
@@ -239,6 +268,32 @@ export class TelegramBot {
       parse_mode: 'HTML',
       disable_web_page_preview: true,
       ...extra,
+    });
+  }
+
+  /**
+   * Reply to an inline query with the picker the player sees after typing
+   * `@JackedBot` in a chat.
+   *
+   * `results` is sent as a real array rather than a JSON string: this client posts
+   * `application/json`, where Telegram accepts nested structures directly - the same
+   * path `sendInvoice` uses for `prices`, which is proven against the live API.
+   *
+   * `isPersonal` defaults to true and must stay true. Without it, the results for
+   * one player get cached and offered to another, which would surface someone else's
+   * private table slug in their picker.
+   */
+  answerInlineQuery(
+    inlineQueryId: string,
+    results: InlineQueryResult[],
+    opts: { cacheTime?: number; isPersonal?: boolean; button?: { text: string; start_parameter?: string; web_app?: { url: string } } } = {},
+  ) {
+    return this.call<boolean>('answerInlineQuery', {
+      inline_query_id: inlineQueryId,
+      results: results.slice(0, 50),
+      cache_time: opts.cacheTime ?? 0,
+      is_personal: opts.isPersonal ?? true,
+      ...(opts.button ? { button: opts.button } : {}),
     });
   }
 

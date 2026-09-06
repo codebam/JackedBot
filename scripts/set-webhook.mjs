@@ -98,7 +98,11 @@ await tgCall(token, 'setWebhook', {
   secret_token: secret,
   // Only the update types the router actually reads. Leaving this unset makes
   // Telegram send everything, including reactions and chat-member churn.
-  allowed_updates: ['message', 'edited_message', 'callback_query', 'pre_checkout_query'],
+  // inline_query is what makes private-table sharing work. Telegram drops every
+  // update type not listed here without any error on either side, so omitting it
+  // looks exactly like "inline mode is broken" - check this line first if the
+  // @JackedBot picker never appears. Keep in sync with TelegramBot.setWebhook().
+  allowed_updates: ['message', 'edited_message', 'callback_query', 'pre_checkout_query', 'inline_query'],
   drop_pending_updates: hasFlag('flush'),
   max_connections: 40,
 });

@@ -1,0 +1,75 @@
+---
+// /new-table — create an unlisted, invite-only private table.
+//
+// Reached from /newtable in the bot and from the lobby button. Deliberately a page
+// and not a modal on /: it posts to /api/tables and then hands back an invite URL,
+// which is worth a shareable address of its own (and a deep link target from inline
+// mode when someone has nothing to share yet).
+//
+// SessionGate wraps the form rather than sitting beside it. The route creates real
+// records in D1, so "age unconfirmed" must mean "no form", not "form plus a
+// banner". SSR identity is only ever a fast path here, exactly as on /, so the
+// gate is decided client-side from initData.
+import Base from '../layouts/Base.astro';
+import { SessionGate } from '../components/SessionGate.tsx';
+import { CreateTableForm } from '../components/CreateTableForm.tsx';
+import { env } from 'cloudflare:workers';
+import { getConfig } from '../lib/config.ts';
+import { normalizeInitData } from '../lib/auth.ts';
+import { validateInitData } from '../lib/telegram/initData.ts';
+import { bootstrapUser } from '../lib/telegram/session.ts';
+
+export const prerender = false;
+
+const cfg = getConfig(env as unknown as Env, Astro.request.url);
+const starsLabel = `${cfg.buyIn.stars} ⭐ → ${cfg.centsPerStar / 100} dollars of chips`;
+
+// Fast path only, exactly as on /: Telegram passes initData to the WebApp client
+// object, so SSR usually has nothing and SessionGate resolves it in the browser.
+const rawInit = normalizeInitData(Astro.url.searchParams.get('tgWebAppData') ?? (Astro.request.headers.get('x-telegram-init-data') ?? ''));
+let ageAccepted: boolean | undefined;
+try {
+  if (rawInit) {
+    const check = await validateInitData(rawInit, { botToken: cfg.botToken, maxAgeSeconds: cfg.initDataMaxAgeSeconds });
+    if (check.ok) {
+      const boot = await bootstrapUser(env as unknown as Env, cfg, check.data.user);
+      ageAccepted = boot.ageAccepted;
+    }
+  }
+} catch {
+  ageAccepted = undefined;
+}
+---
+
+<Base title="Create a private table · JackedBot">
+  <main class="page">
+    <header class="lobby__head">
+      <a class="backlink" href="/">← Lobby</a>
+      <h1>Jacked<span>Bot</span></h1>
+      <p class="lobby__sub">Private table · play money only</p>
+    </header>
+
+    {
+      /* Ellipsis is a JS string, not HTML text: a literal \u2026 inside a static
+         Astro attribute is emitted verbatim and renders as backslash-u-2026. */
+      <SessionGate
+        client:load
+        serverResolved={ageAccepted !== undefined}
+        serverAgeAccepted={ageAccepted}
+        houseWarning={cfg.houseWarning}
+        starsLabel={starsLabel}
+        pendingNotice={'Signing you in…'}
+      >
+        <CreateTableForm client:load />
+      </SessionGate>
+    }
+  </main>
+</Base>
+
+<style>
+  .backlink {
+    color: var(--gold, #d8b45a);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+</style>

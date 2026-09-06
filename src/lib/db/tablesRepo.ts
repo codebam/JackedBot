@@ -76,13 +76,17 @@ export async function getTableConfig(db: D1Database, tableId: string): Promise<T
 /**
  * Lobby listing. Deliberately D1-only: rendering the lobby must not pay the
  * latency (or CPU) cost of waking every Table DO.
+ *
+ * Public tables only: `is_public = 0` means unlisted as well as invite-only, so a
+ * private game night must not surface in the lobby a stranger is browsing. The
+ * owner's own view appends theirs from listShareableTables() instead.
  */
 export async function listLobbyTables(db: D1Database): Promise<LobbyTable[]> {
   const res = await db
     .prepare(
       `SELECT id, name, status, buy_in_cents, min_bet_cents, max_bet_cents, min_bankroll_cents, seat_count, phase, active_seats, last_activity_at, snapshot
          FROM tables
-        WHERE status <> 'closed'
+        WHERE status <> 'closed' AND is_public = 1
         ORDER BY (active_seats > 0) DESC, last_activity_at DESC NULLS LAST, id ASC
         LIMIT 50`,
     )

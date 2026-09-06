@@ -40,6 +40,7 @@ import { normaliseChips } from '../game/betting.ts';
 import { settleHand, type Outcome, type SettledHand } from '../game/settlement.ts';
 import { applyLedgerOp, LedgerKeys } from '../lib/db/ledger.ts';
 import { getTableConfig, writeHeartbeat, recordRound, ensureDefaultTables, type TableConfig } from '../lib/db/tablesRepo.ts';
+import { getMembership } from '../lib/db/privateTables.ts';
 import { getUser, displayName as dn } from '../lib/db/users.ts';
 import { getConfig, type AppConfig } from '../lib/config.ts';
 import { verifyTicket } from '../lib/auth.ts';
@@ -467,6 +468,15 @@ export class Table extends DurableObject<Env> {
     const row = await getUser(this.env.DB, userId);
     if (!row) return { t: 'ack', ref, ok: false, error: 'Account not found. Re-open the mini app.', code: 'NO_ACCOUNT' };
     if (!row.age_accepted_at) return { t: 'ack', ref, ok: false, error: 'Confirm you are 18 or over to play.', code: 'AGE_GATE_REQUIRED' };
+    // Authoritative, not a copy of the route check: the DO is the only writer of
+    // seats, and there are two ways in (socket and the HTTP action fallback) plus any
+    // future one. A gate that has to be remembered per-route is a gate that leaks.
+    if (!this.tableCfg.isPublic) {
+      const role = await getMembership(this.env.DB, this.tableCfg.id, userId);
+      if (!role) {
+        return { t: 'ack', ref, ok: false, error: 'This table is private. Open it from the invite link in your group chat.', code: 'NOT_A_MEMBER' };
+      }
+    }
     if (row.banned_at) return { t: 'ack', ref, ok: false, error: 'This account is suspended.', code: 'BANNED' };
     if (row.bankroll_cents <= 0) return { t: 'ack', ref, ok: false, error: 'You are out of chips — buy more Stars to rebuy.', code: 'NEED_REBUY' };
     // Seat price of admission. Echo asks for $10, which a $20 welcome stack clears

@@ -7,6 +7,7 @@ import { env } from 'cloudflare:workers';
 import { AuthError, requireUser } from '../../../../lib/auth.ts';
 import { authResponse, err, ok, parseTableId, readJson } from '../../../../lib/http.ts';
 import { tableCommand } from '../../../../lib/table-client.ts';
+import { resolveTableAccess } from '../../../../lib/table-access.ts';
 import { rateLimitOr429, SlidingWindowRateLimiter } from '../../../../lib/ratelimit.ts';
 import type { ClientMessage } from '../../../../shared/protocol.ts';
 import type { APIContext } from 'astro';
@@ -37,6 +38,13 @@ export async function POST(context: APIContext<{ id: string }>): Promise<Respons
 
   const cmd = await readJson<ClientMessage>(request);
   if (!cmd || !ALLOWED.has(cmd.t)) return err('BAD_COMMAND', 'Unsupported command.', 400);
+
+  // This route used to forward straight to the DO with no visibility check at all,
+  // so `sit` at a private table was reachable over plain HTTP by anyone who knew the
+  // slug. The DO also enforces membership on `sit` - it is the only writer of seats -
+  // but a 403 with an explanation beats a table that silently refuses to start.
+  const access = await resolveTableAccess(env.DB, tableId, auth.user.telegram_user_id);
+  if (!access.ok) return err(access.code, access.message, access.status);
 
   const r = await tableCommand(env as unknown as Env, tableId, auth.user.telegram_user_id, cmd);
   const payload = r.payload as { ok?: boolean; data?: unknown; error?: string; code?: string };
