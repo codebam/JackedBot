@@ -86,7 +86,7 @@ export function CreateTableForm({ defaultName }: { defaultName?: string }) {
 
   if (created) {
     return (
-      <div className="card">
+      <div className="tcard">
         <h2 className="lobby__h2">{created.stakes.name} is open</h2>
         <p className="lobby__sub">
           {formatCents(created.stakes.minBetCents)}–{formatCents(created.stakes.maxBetCents)} blinds · buy-in{' '}
@@ -125,7 +125,7 @@ export function CreateTableForm({ defaultName }: { defaultName?: string }) {
   }
 
   return (
-    <form className="card form" onSubmit={submit}>
+    <form className="tcard form" onSubmit={submit}>
       <h2 className="lobby__h2">Private table</h2>
       <p className="lobby__sub">Unlisted, invite-only. Your own blinds and buy-in.</p>
 
