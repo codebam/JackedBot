@@ -6,6 +6,7 @@
 // Reading `env.DEFAULT_MIN_BET_CENTS` directly as a number is a classic footgun,
 // so nothing outside this file touches a raw var.
 // =============================================================================
+import { startParamForPath } from '../shared/deeplink.ts';
 import { RULES } from '../game/rules.ts';
 
 export interface AppConfig {
@@ -125,16 +126,25 @@ export function absoluteUrl(cfg: AppConfig, path: string): string {
   return `${cfg.origin}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-/** Telegram deep link that opens the Mini App, used by /start and setChatMenuButton. */
-export function miniAppLink(cfg: AppConfig, path: string = cfg.miniAppPath, startParam?: string): string {
+/**
+ * Telegram deep link that opens the Mini App.
+ *
+ * `https://t.me/<bot>?startapp=<param>` is the only form that works, and <param> is
+ * an opaque <=64 char base64url token - NOT a URL. Telegram hands it to the app as
+ * `tgWebAppStartParam`, and src/shared/deeplink.ts turns it back into a route.
+ *
+ * The previous implementation emitted `?app=<absolute url>`, which is not a Telegram
+ * parameter at all: t.me ignores it and opens the bot's chat. Every invite link this
+ * app produced was therefore inert, encoded or not, and no amount of fixing the
+ * encoding could have helped. Opening a Mini App this way also requires the Main
+ * Screen URL to be registered with the bot in BotFather.
+ */
+export function miniAppLink(cfg: AppConfig, path: string = cfg.miniAppPath): string {
   const clean = path.startsWith('/') ? path : `/${path}`;
-  const url = absoluteUrl(cfg, startParam ? `${clean}${clean.includes('?') ? '&' : '?'}startapp=${startParam}` : clean);
-  return cfg.botUsername
-    // The inner URL must stay RAW. Telegram's t.me deep link takes everything after
-    // ?app= as a literal URL, so percent-encoding it yields a link that opens nothing
-    // (https://t.me/JackedBot?app=https%3A%2F%2F... was copied straight to chat).
-    ? `https://t.me/${cfg.botUsername}?app=${url}`
-    : url;
+  if (!cfg.botUsername) return absoluteUrl(cfg, clean); // no bot to hang a link on
+  const param = startParamForPath(clean);
+  if (param === null) return absoluteUrl(cfg, clean); // unrouted path: give the direct URL
+  return `https://t.me/${cfg.botUsername}?startapp=${param}`;
 }
 
 /**
@@ -142,7 +152,7 @@ export function miniAppLink(cfg: AppConfig, path: string = cfg.miniAppPath, star
  *
  * This is NOT the same thing as miniAppLink(). Telegram validates web_app.button
  * URLs against the bot's registered Mini App domain and rejects the
- * `https://t.me/<bot>?app=<url>` share-link form with
+ * `https://t.me/<bot>?startapp=<param>` share-link form with
  *   "Bad Request: BUTTON_URL_INVALID"
  * which took down the button on /start, /balance and /tables at once. The t.me
  * form is only for `url:` buttons and chat links; a web_app button must receive

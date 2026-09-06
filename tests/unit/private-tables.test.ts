@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { validateStakes, safeTableName, STAKE_LIMITS } from '../../src/lib/stakes.ts';
 import { buildInlineResults } from '../../src/lib/telegram/inline.ts';
+import { startParamForPath, pathForStartParam } from '../../src/shared/deeplink.ts';
 import type { PrivateTableSummary } from '../../src/lib/db/privateTables.ts';
 
 const good = { name: 'Friday night', minBetCents: 500, maxBetCents: 20_000, buyInCents: 10_000, minBankrollCents: 2_500, seatCount: 5 };
@@ -206,12 +207,31 @@ describe('Telegram wire-format rules the API enforces and TypeScript does not', 
     for (const r of help) expect(r.id).toMatch(ID_CHARSET);
   });
 
-  // t.me/<bot>?app=<url> takes the URL raw; percent-encoding produces a link that
-  // opens nothing. Asserted against source because miniAppLink needs a full AppConfig
-  // and the invariant is about which expression is interpolated, not about runtime.
-  it('interpolates the raw app URL into the t.me deep link', () => {
+});
+
+describe('Mini App deep links use the only form Telegram implements', () => {
+  // t.me/<bot>?app=<url> was never a Telegram parameter; the client ignored it and
+  // opened the bot's chat, so every invite link we generated was inert.
+  it('encodes a table invite as a start param and back again', () => {
+    const id = 'a3b4ca98dc4b4aae815c51b87ba72e71';
+    expect(startParamForPath(`/table/${id}?invite=1`)).toBe(`t_${id}`);
+    expect(pathForStartParam(`t_${id}`)).toBe(`/table/${id}?invite=1`);
+    // Telegram's 64-char base64url budget applies to the start PARAM, not the link.
+    expect(`t_${id}`).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    expect(`t_${id}`.length).toBeLessThanOrEqual(64);
+  });
+
+  it('refuses to turn a start param into an arbitrary path', () => {
+    for (const bad of ['t_zzz', 't_' + 'a'.repeat(31), 't_' + 'a'.repeat(32) + 'x', 'https://evil.example/', '', 'x_' + 'a'.repeat(32)]) {
+      expect(pathForStartParam(bad)).toBe(null);
+    }
+    expect(pathForStartParam('h')).toBe('/');
+    expect(startParamForPath('/new-table')).toBe(null);
+  });
+
+  it('builds share links as startapp, never as the invented ?app= form', () => {
     const src = readFileSync('src/lib/config.ts', 'utf8');
-    expect(src).toMatch(/\?app=\$\{url\}/);
-    expect(src).not.toMatch(/\?app=\$\{encodeURIComponent/);
+    expect(src).toMatch(/\?startapp=\$\{param\}/);
+    expect(src).not.toMatch(/`https:\/\/t\.me\/\$\{cfg\.botUsername\}\?app=/);
   });
 });

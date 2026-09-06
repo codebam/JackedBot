@@ -12,6 +12,7 @@
 // HMAC), and surfaces the age gate when it is still open.
 // =============================================================================
 import { useEffect, useState } from 'preact/hooks';
+import { followTelegramStartParam } from '../lib/client/deeplink.ts';
 import type { ComponentChildren } from 'preact';
 import { AgeGate } from './AgeGate.tsx';
 import { api, ApiError } from '../lib/client/api.ts';
@@ -53,6 +54,12 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
 
   useEffect(() => {
     let alive = true;
+
+    // A deep link (t.me/<bot>?startapp=t_<id>) always lands on the Main Screen URL,
+    // which is `/`. Route to the invited table first: authenticating the lobby we are
+    // about to leave is a wasted round trip, and 'h'/'same page' params return false
+    // so this cannot loop.
+    if (followTelegramStartParam()) return;
 
     async function boot() {
       // Outside Telegram there is no initData to send; say so rather than
