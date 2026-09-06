@@ -1,18 +1,28 @@
-# Copy to .dev.vars for local development (`astro dev` / `wrangler dev`).
-# Real values in production via: npm run secrets:set   (wrangler secret put ...)
+# Copy to .dev.vars for local development (`astro dev`). Never commit the copy.
+# Production values go in via `npm run secrets:set` (wrangler secret put), NOT here.
+#
+# Two of these you obtain, one you invent, one you also invent:
+#
+#   TELEGRAM_BOT_TOKEN           <- @BotFather /token   (the ONLY credential you get from anyone)
+#   APP_SECRET                   <- you generate: openssl rand -hex 32
+#   TELEGRAM_WEBHOOK_SECRET      <- you generate: openssl rand -hex 32
+#                                  ...then hand the SAME string to Telegram with
+#                                  `npm run telegram:webhook`, which passes it as
+#                                  setWebhook's secret_token. Telegram echoes it back
+#                                  in the X-Telegram-Bot-Api-Secret-Token header on
+#                                  every delivery, and the webhook route compares it
+#                                  before parsing the update. Without it, anyone who
+#                                  discovers your workers.dev URL could POST a fake
+#                                  successful_payment and mint chips.
 
-# From @BotFather. Format: <bot_id>:<secret>
-TELEGRAM_BOT_TOKEN=123456789:AAExampleTokenNotARealOneaaaaaaaaaaaaaaaaa
-
-# >= 32 chars. Signs WebSocket tickets. Generate:
-#   openssl rand -hex 32
-APP_SECRET=0000000000000000000000000000000000000000000000000000000000000000
-
-# Sent by Telegram in the X-Telegram-Bot-Api-Secret-Token webhook header.
-TELEGRAM_WEBHOOK_SECRET=0000000000000000000000000000000000000000000000000000000000000000
+# Deliberately non-realistic placeholders: no value below matches the shape of a
+# credential, so GitHub secret scanning and human reviewers both stay quiet.
+TELEGRAM_BOT_TOKEN=PASTE_FROM_BOTFATHER_SLASH_TOKEN
+APP_SECRET=GENERATE_WITH_openssl_rand_hex_32
+TELEGRAM_WEBHOOK_SECRET=GENERATE_WITH_openssl_rand_hex_32
 
 # Comma-separated Telegram user ids allowed to run /refund and /grant
 ADMIN_USER_IDS=
 
-# "1" lets Telegram test-environment charges mint chips. Keep unset in production.
+# "1" lets Telegram test-environment charges mint chips. Never set in production.
 ALLOW_TEST_PAYMENTS=

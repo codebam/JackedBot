@@ -29,7 +29,8 @@
     "gen": "node scripts/sync-migration.mjs && node scripts/gen-test-schema.mjs",
     "check:sync": "node scripts/sync-migration.mjs --check && node scripts/gen-test-schema.mjs --check",
     "imports": "node scripts/check-imports.mjs src",
-    "e2e:ws": "node scripts/e2e-ws.mjs"
+    "e2e:ws": "node scripts/e2e-ws.mjs",
+    "prepare:gen": "node scripts/sync-migration.mjs && node scripts/gen-test-schema.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.0",

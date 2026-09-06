@@ -7,7 +7,10 @@ import { formatCents, sumChips, toCents } from '../../src/shared/money.ts';
 import { SlidingWindowRateLimiter } from '../../src/lib/ratelimit.ts';
 import type { AppConfig } from '../../src/lib/config.ts';
 
-const TOKEN = '123456789:AAHTestTokenNotReal-but-shape-valid_abcdef';
+// Not credential-shaped on purpose: this is only ever an HMAC key for the
+// signature fixture below, and a `digits:alphanumeric` string in a public repo
+// reads as a leaked bot token to every secret scanner and human reviewer.
+const TOKEN = 'security-test-fixture-key-not-a-bot-token';
 const SECRET = '0123456789abcdef0123456789abcdef0123456789abcdef';
 
 const te = new TextEncoder();
@@ -78,7 +81,7 @@ describe('validateInitData', () => {
   });
 
   it('rejects a payload signed by a different bot', async () => {
-    const raw = await forge({ user: USER, auth_date: String(NOW) }, '999999:AAOtherBotTokenDifferentSecret_zzz');
+    const raw = await forge({ user: USER, auth_date: String(NOW) }, 'security-test-fixture-OTHER-key');
     const r = await validateInitData(raw, { botToken: TOKEN, maxAgeSeconds: 86_400 });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('BAD_HASH');
