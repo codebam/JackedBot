@@ -157,3 +157,36 @@ describe('inline mode wiring', () => {
     expect(src).toMatch(/command: 'newtable'/);
   });
 });
+
+describe('seatCount is a count of people, not money', () => {
+  // Regression: the create form once ran the seats <select> through its dollars->cents
+  // helper, so "5" reached validateStakes as 500 and every private table failed with
+  // "A table seats between 1 and 5 players."
+  const stakes = (over: Record<string, unknown>) =>
+    validateStakes({ name: 'Duror Fans Table', minBetCents: 100, maxBetCents: 1000, buyInCents: 500, minBankrollCents: 100, ...over });
+
+  it('accepts an integer seat count', () => {
+    for (const n of [1, 2, 3, 4, 5]) {
+      const r = stakes({ seatCount: n });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect(r.value.seatCount).toBe(n);
+    }
+  });
+
+  it('rejects a seat count that was multiplied by 100 on the way out', () => {
+    const r = stakes({ seatCount: 500 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('SEAT_COUNT_INVALID');
+  });
+
+  it('keeps money in integer cents and counts as counts', () => {
+    const r = stakes({ seatCount: 5 });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.minBetCents).toBe(100); // $1.00
+      expect(r.value.seatCount).toBe(5); // five chairs
+    }
+    expect(stakes({ seatCount: 2.5 }).ok).toBe(false);
+    expect(stakes({ seatCount: '5' }).ok).toBe(false);
+  });
+});

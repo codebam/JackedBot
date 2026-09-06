@@ -34,8 +34,17 @@ const PRESETS: Preset[] = [
   { label: 'High · $25–$500', min: 25, max: 500, buyIn: 500, floor: 250, seats: 4 },
 ];
 
-/** Dollars in the DOM, integer cents on the wire. Empty is null, not 0. */
-function cents(v: string): number | null {
+/**
+ * Dollars in the DOM, integer cents on the wire. Empty is null, not 0.
+ *
+ * Named `toCents`, not `cents`. validateStakes exports its own `cents`, which means
+ * "this must ALREADY be an integer count of cents" - the opposite job. With both
+ * called `cents`, this file's seats field went out as `cents('5')` = 500 and the
+ * server correctly answered "A table seats between 1 and 5 players." A seat count is
+ * a count of people; it was never money, and no comment about "integer-cents
+ * discipline" makes it so.
+ */
+function toCents(v: string): number | null {
   if (!v.trim()) return null;
   const n = Number(v);
   return Number.isFinite(n) ? Math.round(n * 100) : null;
@@ -68,11 +77,12 @@ export function CreateTableForm({ defaultName }: { defaultName?: string }) {
     setError('');
     const body = {
       name,
-      minBetCents: cents(min),
-      maxBetCents: cents(max),
-      buyInCents: cents(buyIn),
-      minBankrollCents: cents(floor) ?? 0,
-      seatCount: cents(seats), // whole numbers, same integer-cents discipline
+      minBetCents: toCents(min),
+      maxBetCents: toCents(max),
+      buyInCents: toCents(buyIn),
+      minBankrollCents: toCents(floor) ?? 0,
+      // A count of chairs, not a cash amount: no x100 anywhere near this.
+      seatCount: Number.parseInt(seats, 10),
     };
     try {
       const r = await api<Created>('/api/tables', { method: 'POST', body });
