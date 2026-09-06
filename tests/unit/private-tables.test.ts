@@ -83,15 +83,20 @@ const table = (over: Partial<PrivateTableSummary>): PrivateTableSummary => ({
 describe('buildInlineResults', () => {
   const appUrl = (path: string) => `https://jackedbot.example.workers.dev${path}`;
 
-  it('offers a bare-https web_app URL, never a t.me share link', () => {
+  it('uses a url button on inline results, never web_app', () => {
     // This is the BUTTON_URL_INVALID class of bug. In inline mode the symptom is an
     // empty picker with no error at all, so assert the shape rather than the code path.
     const r = buildInlineResults({ query: '', tables: [table({})], appUrl })[0]!;
-    const btn = r.reply_markup?.inline_keyboard[0]?.[0] as { text: string; web_app?: { url: string } };
+    const btn = r.reply_markup?.inline_keyboard[0]?.[0] as { text: string; url?: string; web_app?: { url: string } };
     expect(btn.text).toBe('Join table');
-    expect(btn.web_app?.url).toBe(`https://jackedbot.example.workers.dev/table/${'a'.repeat(32)}?invite=1`);
-    expect(btn.web_app?.url).not.toContain('t.me');
-    expect(btn.web_app?.url.startsWith('https://')).toBe(true);
+    // web_app is not a legal button type on an inline result: Telegram answers
+    // BUTTON_TYPE_INVALID and drops the whole batch, which the client shows as
+    // "No results". The deep link has to ride in a plain url button.
+    expect(btn.web_app).toBeUndefined();
+    // Without a deepLink the helper falls back to the bare https app URL, which is
+    // still a legal `url` button. handleInlineQuery always supplies deepLink, so the
+    // shipped form is t.me/<bot>?startapp=t_<id>; asserted in config.ts below.
+    expect(btn.url).toBe(`https://jackedbot.example.workers.dev/table/${'a'.repeat(32)}?invite=1`);
   });
 
   it('keeps result ids within Telegram limits and unique', () => {
@@ -111,7 +116,12 @@ describe('buildInlineResults', () => {
     const rs = buildInlineResults({ query: 'nothing matches', tables: [], appUrl, createUrl: appUrl('/new-table') });
     expect(rs).toHaveLength(1);
     expect(rs[0]!.id).toBe('help-none');
-    expect(JSON.stringify(rs)).toContain('/new-table');
+    // The create row can no longer point at /new-table as a web_app button; it links
+    // to the lobby, where the create button lives and where initData exists.
+    const btn = rs[0]!.reply_markup?.inline_keyboard[0]?.[0] as { text: string; url?: string; web_app?: unknown };
+    expect(btn.web_app).toBeUndefined();
+    expect(btn.text).toMatch(/create/i);
+    expect(btn.url).toBe('https://jackedbot.example.workers.dev/');
   });
 
   it('labels a full table honestly rather than offering a Join that will fail', () => {

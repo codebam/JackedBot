@@ -8,7 +8,8 @@
 //     hands us `inline_query.from.id`, and nothing else, so a table can only ever
 //     appear for someone already enrolled in it. Combined with `is_personal` in
 //     api.ts, a stranger's picker cannot surface someone's game night.
-//  2. The posted message carries a `web_app` button with a bare https URL. The
+//  2. The posted message carries a `url` button holding a t.me/<bot>?startapp= deep
+//    link. NOT a web_app button: Telegram rejects that type on inline results.
 //     `t.me/<bot>?app=` share form is rejected there with BUTTON_URL_INVALID, which
 //     is the bug that took out /start and /balance in production - and in inline
 //     mode the rejection would be invisible, showing as an empty picker.
@@ -18,7 +19,7 @@ import { esc } from './api.ts';
 import type { InlineQuery, InlineQueryResult, TelegramBot } from './api.ts';
 import type { PrivateTableSummary } from '../db/privateTables.ts';
 import { listShareableTables } from '../db/privateTables.ts';
-import { webAppUrl } from '../config.ts';
+import { miniAppLink, webAppUrl } from '../config.ts';
 import type { AppConfig } from '../config.ts';
 import type { WebhookOutcome } from './webhook.ts';
 
@@ -32,6 +33,13 @@ export interface InlineArgs {
   tables: PrivateTableSummary[];
   /** Absolute https Mini App URL for a path. Injected so tests need no config. */
   appUrl: (path: string) => string;
+  /**
+   * t.me/<bot>?startapp=<param> form. REQUIRED on inline results: Telegram rejects
+   * `web_app` buttons in an inline result's reply_markup with BUTTON_TYPE_INVALID,
+   * and one bad button discards the whole batch, which the client shows as a bare
+   * "No results". web_app is only legal in messages the bot itself sends.
+   */
+  deepLink?: (path: string) => string;
   /** Link to offer when the player has nothing to share. Optional. */
   createUrl?: string;
 }
@@ -69,11 +77,12 @@ export async function handleInlineQuery(
       query: query.query ?? '',
       tables,
       appUrl: (path) => webAppUrl(cfg, path),
+      deepLink: (path) => miniAppLink(cfg, path),
       createUrl: cfg.botUsername ? webAppUrl(cfg, '/new-table') : undefined,
     });
   } catch (e) {
     console.error('inline query failed', (e as Error).message);
-    results = buildInlineResults({ query: '', tables: [], appUrl: (path) => webAppUrl(cfg, path) });
+    results = buildInlineResults({ query: '', tables: [], appUrl: (path) => webAppUrl(cfg, path), deepLink: (path) => miniAppLink(cfg, path) });
   }
 
   try {
@@ -97,6 +106,7 @@ export async function handleInlineQuery(
  * teaching anyone that slugs are a usable lookup key.)
  */
 export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
+  const link = args.deepLink ?? args.appUrl; // a bare https url is still a legal url button
   const needle = args.query.trim().toLowerCase();
   const matched = args.tables.filter((t) => !needle || t.name.toLowerCase().includes(needle) || stakes(t).toLowerCase().includes(needle));
 
@@ -121,7 +131,7 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
         disable_web_page_preview: true,
       },
       reply_markup: {
-        inline_keyboard: [[{ text: open > 0 ? 'Join table' : 'View table', web_app: { url: args.appUrl(`/table/${t.id}?invite=1`) } }]],
+        inline_keyboard: [[{ text: open > 0 ? 'Join table' : 'View table', url: link(`/table/${t.id}?invite=1`) }]],
       },
     };
   });
@@ -144,7 +154,7 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
         disable_web_page_preview: true,
       },
       ...(args.createUrl
-        ? { reply_markup: { inline_keyboard: [[{ text: 'Create private table', web_app: { url: args.createUrl } }]] } }
+        ? { reply_markup: { inline_keyboard: [[{ text: 'Open JackedBot to create one', url: link('/') }]] } }
         : {}),
     },
   ];
