@@ -43,12 +43,6 @@ try {
 }
 
 const starsLabel = formatCents(cfg.centsPerStar);
-// If the URL carries Telegram's own launch params, the client will authenticate
-// even though SSR could not — so suppress the SSR warning in that case.
-const isTelegramHinted =
-  Astro.url.searchParams.has('tgWebAppData') ||
-  Astro.url.searchParams.has('tgWebAppVersion') ||
-  Astro.url.searchParams.has('startapp');
 // Handed to the islands so the very first client render already has a session to
 // offer, instead of waiting on a round trip to /api/session.
 const boot: Record<string, unknown> = { initData: rawInit || undefined, me, origin: resolveOrigin(env as unknown as Env, Astro.request.url) };
@@ -84,7 +78,7 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
         serverAgeAccepted={me ? me.ageAccepted : undefined}
         houseWarning={cfg.houseWarning}
         starsLabel={starsLabel}
-        pendingNotice="Signing you in with Telegram\u2026"
+        pendingNotice={'Restoring your Telegram session\u2026'}
       />
     }
 
@@ -103,9 +97,10 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
       ) : null
     }
 
-    <!-- SSR could not authenticate. The SessionGate island above owns the live
-         state, so this is only ever a quiet diagnostic, never a dead end. -->
-    {authNote && !me && !isTelegramHinted ? <p class="alert">{authNote}</p> : null}
+    <!-- Deliberately NOT rendered: see the SessionGate note above. This banner was
+         keyed on SSR state alone, and SSR cannot see initData (Telegram passes it to
+         the client object, not the URL), so it told authenticated players to open the
+         app inside Telegram while the app was already inside Telegram. -->
 
     <section class="lobby__tables">
       <h2 class="lobby__h2">Open tables</h2>
