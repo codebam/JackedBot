@@ -4,13 +4,13 @@
 import Base from '../layouts/Base.astro';
 import { SessionGate } from '../components/SessionGate.tsx';
 import { WalletBar } from '../components/WalletBar.tsx';
+import { PrivateTables } from '../components/PrivateTables.tsx';
 import { env } from 'cloudflare:workers';
 import { getConfig, resolveOrigin } from '../lib/config.ts';
 import { normalizeInitData } from '../lib/auth.ts';
 import { validateInitData } from '../lib/telegram/initData.ts';
 import { bootstrapUser } from '../lib/telegram/session.ts';
 import { ensureDefaultTables, listLobbyTables } from '../lib/db/tablesRepo.ts';
-import { listShareableTables, type PrivateTableSummary } from '../lib/db/privateTables.ts';
 import { formatCents } from '../shared/money.ts';
 import type { LobbyTable } from '../shared/protocol.ts';
 
@@ -20,7 +20,6 @@ const cfg = getConfig(env as unknown as Env, Astro.request.url);
 // preview lobby, and every privileged action still requires verified initData.
 const rawInit = normalizeInitData(Astro.url.searchParams.get('tgWebAppData') ?? (Astro.request.headers.get('x-telegram-init-data') ?? ''));
 let tables: LobbyTable[] = [];
-let privateTables: PrivateTableSummary[] = [];
 let me: { userId: number; name: string; bankrollCents: number; ageAccepted: boolean; welcomeGranted: boolean } | null = null;
 
 try {
@@ -36,7 +35,6 @@ try {
     };
     // Own/private felt comes from membership, never from the public listing - a
     // stranger browsing the lobby must not see someone's game night.
-    privateTables = await listShareableTables(env.DB, me.userId);
   } else {
     // No notice here. authNote was dead since 5f6e07b, and every string it built told
     // people already inside Telegram to open the page inside Telegram, because SSR
@@ -168,46 +166,7 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
       }
     </section>
 
-    {
-      privateTables.length > 0 ? (
-        <section class="lobby">
-          <h2 class="lobby__h2">Your private tables</h2>
-          <p class="lobby__sub">Unlisted. Share them by typing @JackedBot in a group chat.</p>
-          <ul class="tcards">
-            {privateTables.map((t) => (
-              <li class="tcard">
-                <div class="tcard__top">
-                  <b>{t.name}</b>
-                  <span class="badge">{t.role === 'owner' ? 'yours' : 'invited'}</span>
-                </div>
-                <p class="lobby__fine">
-                  {formatCents(t.minBetCents)}–{formatCents(t.maxBetCents)} · {t.activeSeats}/{t.seatCount} seated
-                </p>
-                <div class="tcard__actions">
-                  <a class="btn btn--primary" href={`/table/${t.id}?invite=1`}>
-                    Open table
-                  </a>
-                  {
-                    // Owners only. `data-name` is for the confirmation text, which is
-                    // the one place a player can destroy something they created.
-                    t.role === 'owner' ? (
-                      <button
-                        type="button"
-                        class="btn btn--ghost btn--sm"
-                        data-close={t.id}
-                        data-name={t.name}
-                      >
-                        Close
-                      </button>
-                    ) : null
-                  }
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null
-    }
+    <PrivateTables client:load />
 
     <section class="lobby__create">
       <a class="btn btn--gold btn--block" href="/new-table">Create a private table</a>
@@ -231,33 +190,3 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
     </section>
   </main>
 </Base>
-
-<script>
-  // Closing is a state change on a row the lobby renders from SSR, so the cheapest
-  // honest interaction is: POST, then reload and let the server re-render the list.
-  // No optimistic removal, because a table that refuses to close would silently
-  // disappear from the page while still being joinable.
-  import { api, humanError } from '../lib/client/api.ts';
-
-  for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-close]'))) {
-    btn.addEventListener('click', async () => {
-      const tableId = btn.dataset.close;
-      if (!tableId) return;
-      const name = btn.dataset.name ?? 'this table';
-      if (!confirm(`Close “${name}”?\n\nNobody will be able to join it again and it leaves your lobby and the @JackedBot picker. Players already seated can finish the hand they are in.`)) {
-        return;
-      }
-      btn.disabled = true;
-      const label = btn.textContent;
-      btn.textContent = 'Closing…';
-      try {
-        await api(`/api/tables/${tableId}/close`, { method: 'POST', body: {} });
-        location.reload();
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = label;
-        alert(humanError(e));
-      }
-    });
-  }
-</script>

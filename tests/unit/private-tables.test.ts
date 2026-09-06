@@ -245,3 +245,26 @@ describe('Mini App deep links use the only form Telegram implements', () => {
     expect(src).not.toMatch(/`https:\/\/t\.me\/\$\{cfg\.botUsername\}\?app=/);
   });
 });
+
+describe('the private-table list is a client concern, not an SSR one', () => {
+  // Telegram hands initData to the WebApp client object, not to the URL. Any lobby
+  // section rendered from SSR identity is therefore absent for a real Mini App launch
+  // - the bug behind the inert Join button (ded99de) and the table-page nag
+  // (25fa085), and it would have hidden the owner's only Close button too.
+  it('renders the section from an island, never from SSR membership', () => {
+    const src = readFileSync('src/pages/index.astro', 'utf8');
+    expect(src).not.toMatch(/listShareableTables/);
+    expect(src).toMatch(/<PrivateTables client:load/);
+  });
+
+  it('loads and closes through the session-authenticated API, owner-gated in the UI', () => {
+    const src = readFileSync('src/components/PrivateTables.tsx', 'utf8');
+    expect(src).toMatch(/api<\{ privateTables/);
+    expect(src).toMatch(/\/close/);
+    expect(src).toMatch(/role === 'owner'/);
+    // The server is still the authority; hiding the button is a hint, not a control.
+    const route = readFileSync('src/pages/api/tables/[id]/close.ts', 'utf8');
+    expect(route).toMatch(/NOT_OWNER/);
+    expect(route).toMatch(/getMembership/);
+  });
+});
