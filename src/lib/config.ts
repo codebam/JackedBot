@@ -35,6 +35,8 @@ export interface AppConfig {
   maxBetCents: number;
   /** One-time free play-money stack for brand-new accounts, in cents. 0 disables. */
   welcomeGrantCents: number;
+  /** Automatic house credit when a player hits exactly $0, in cents. 0 disables. */
+  bustReliefCents: number;
   houseWarning: string;
   /** Path inside the deployment that the menu button opens, e.g. "/" or "/lobby". */
   miniAppPath: string;
@@ -108,6 +110,7 @@ export function getConfig(env: Env, requestUrl?: string): AppConfig {
     // Two Stars' worth of chips by default: teaches the 1 Star = $10 rate instead
     // of hiding it, and is ~20 minimum bets at the low table.
     welcomeGrantCents: num(env.WELCOME_GRANT_CENTS, RULES.welcomeGrantCents, { min: 0, max: 100_000 }),
+    bustReliefCents: num(env.BUST_RELIEF_CENTS, RULES.bustReliefCents, { min: 0, max: 100_000 }),
     houseWarning: env.HOUSE_WARNING || 'Play money only. No cash value. 18+.',
     miniAppPath: env.MINI_APP_PATH || '/',
     rules: RULES,

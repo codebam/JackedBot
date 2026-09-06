@@ -69,6 +69,14 @@ export const RULES = {
    */
   welcomeGrantCents: 2_000,
 
+  /**
+   * Automatic house top-up when a player reaches exactly $0, in cents.
+   * $10.00 = one Star's worth, and deliberately less than the welcome stack: relief
+   * keeps the felt playable, it does not fund a session. Override with
+   * BUST_RELIEF_CENTS; set to 0 to disable and go back to the Stars-only rebuy wall.
+   */
+  bustReliefCents: 1_000,
+
   /** Stars -> play money. 1 Star = $10.00 of chips. Non-reversible. */
   starsToCentsPerStar: 1_000,
 

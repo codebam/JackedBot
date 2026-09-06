@@ -38,6 +38,11 @@ export async function POST(context: APIContext): Promise<Response> {
     welcomeGranted: boot.welcomeGranted,
     welcomeCents: boot.welcomeCents,
     welcomeLabel: formatCents(boot.welcomeCents),
+    // A balance that jumps from $0 to $10 with no explanation looks like a bug or a
+    // grant nobody authorised. Saying so is what makes the ledger entry trustworthy.
+    reliefGranted: boot.reliefGranted,
+    reliefCents: boot.reliefCents,
+    reliefLabel: formatCents(boot.reliefCents),
     ageAccepted,
     ageStatement: AGE_GATE_STATEMENT,
     admin: isAdmin(auth.user, auth.cfg.adminIds, auth.user.telegram_user_id),

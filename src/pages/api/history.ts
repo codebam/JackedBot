@@ -41,6 +41,10 @@ export async function GET(context: APIContext): Promise<Response> {
     ledger: ledger.map((e) => ({
       id: e.id,
       reason: e.reason,
+      // The raw enum is not an explanation: `admin_adjust` covers both a human
+      // top-up and the automatic bust relief, and `note` says which happened.
+      refId: e.ref_id,
+      note: e.note,
       centsDelta: e.cents_delta,
       label: e.cents_delta >= 0 ? formatCents(e.cents_delta) : formatCents(e.cents_delta),
       tableId: e.table_id,

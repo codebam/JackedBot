@@ -83,4 +83,8 @@ DEFAULT_MAX_BET_CENTS = "50000"
 # 2000 = $20.00 = exactly two Stars' worth of chips (~20 minimum bets).
 # Set to "0" to disable; new players would then have to buy Stars before sitting.
 WELCOME_GRANT_CENTS = "2000"
+# Automatic house top-up when a player reaches exactly $0, in cents. $10.00 = one
+# Star's worth, less than the welcome stack on purpose: relief keeps the felt
+# playable rather than funding a session. "0" restores the Stars-only rebuy wall.
+BUST_RELIEF_CENTS = "1000"
 HOUSE_WARNING = "Play money only. No cash value. 18+."

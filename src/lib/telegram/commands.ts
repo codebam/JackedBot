@@ -9,11 +9,26 @@ import { formatCents } from '../../shared/money.ts';
 import { miniAppLink, webAppUrl, type AppConfig } from '../config.ts';
 import { getPlayerSummary, listLobbyTables, recentHands } from '../db/tablesRepo.ts';
 import { ledgerTail, paymentsForUser, refundAndClawback, recentPayments } from '../db/payments.ts';
+import { BUST_RELIEF_REF_ID } from '../db/relief.ts';
 import { acceptAgeGate, getUser, hasAcceptedAge, isAdmin } from '../db/users.ts';
 import type { TelegramBot, CallbackQuery, InlineKeyboardMarkup, Message } from './api.ts';
 import { esc } from './api.ts';
 import { AGE_GATE_STATEMENT, bootstrapUser } from './session.ts';
 import type { TelegramWebAppUser } from './initData.ts';
+
+/**
+ * Ledger `reason` is a machine enum. Printed raw, the automatic bust top-up reads as
+ * "an admin handed out money" - which is what `admin_adjust` says, and is not what
+ * happened. `ref_id` is the field that tells the two apart, which is exactly why
+ * relief journals there instead of needing a new reason value (the column is a CHECK
+ * constraint SQLite cannot ALTER).
+ */
+function ledgerLabel(e: { reason: string; ref_id: string | null }): string {
+  if (e.reason === 'admin_adjust') return e.ref_id === BUST_RELIEF_REF_ID ? 'house relief' : 'admin adjust';
+  if (e.reason === 'welcome_grant') return 'welcome stack';
+  if (e.reason === 'buy_in') return 'Stars purchase';
+  return e.reason;
+}
 
 export const BOT_COMMANDS = [
   { command: 'start', description: 'Open the table lobby' },
@@ -132,7 +147,7 @@ Wagered ${esc(formatCents(summary.wagered_cents))} · net ${esc(formatCents(summ
       : `No hands played yet.`,
     ``,
     payments.length ? `<b>Stars purchases</b>\n${payments.map((p) => `• ${p.stars_amount}⭐ → ${esc(formatCents(p.cents_credited))} <i>${esc(p.status)}</i>`).join('\n')}` : `<b>Stars purchases</b>: none`,
-    entries.length ? `\n<b>Recent chip movement</b>\n${entries.map((e) => `• ${esc(e.reason)} ${e.cents_delta >= 0 ? '+' : ''}${esc(formatCents(e.cents_delta))}`).join('\n')}` : '',
+    entries.length ? `\n<b>Recent chip movement</b>\n${entries.map((e) => `• ${esc(ledgerLabel(e))} ${e.cents_delta >= 0 ? '+' : ''}${esc(formatCents(e.cents_delta))}`).join('\n')}` : '',
     ``,
     esc(c.cfg.houseWarning),
   ];

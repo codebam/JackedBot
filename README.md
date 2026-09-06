@@ -175,6 +175,7 @@ All in `wrangler.toml` `[vars]` / `src/game/rules.ts`:
 | Knob | Default |
 |---|---|
 | `WELCOME_GRANT_CENTS` | `2000` ($20 = two Stars' worth; `0` disables) |
+| `BUST_RELIEF_CENTS` | `1000` ($10 credited automatically at exactly $0; `0` disables) |
 | `STARS_BUY_IN_AMOUNT` | `1` Star per purchase |
 | `DEFAULT_MIN_BET_CENTS` / `DEFAULT_MAX_BET_CENTS` | `100` / `50000` |
 | `tables.min_bankroll_cents` | per-table seat price; keeps a free stack off high-roller felt |
@@ -182,6 +183,18 @@ All in `wrangler.toml` `[vars]` / `src/game/rules.ts`:
 | `WS_TICKET_TTL_SECONDS` | `60` |
 | `RULES.dealerPeeksForBlackjack` | `true` (US peek — players can't act into a dealer natural) |
 | `RULES.dealerHitsSoft17` | `false` (stand on all 17s) |
+
+Bust relief: a player who reaches exactly $0 is credited `BUST_RELIEF_CENTS`
+automatically, at the felt (on settlement and on sitting down) and on any app launch, so
+hitting zero is not a paywall. It is journalled as `admin_adjust` with
+`ref_id = 'bust_relief'` — `ledger_entries.reason` is a CHECK constraint SQLite cannot
+ALTER, so a new reason value would mean rebuilding the live money journal. The idempotency
+key is `relief:<user>:<last ledger id>`, which is what makes "once per bust, unlimited
+busts" race-free: two concurrent calls read the same ledger head and the UNIQUE key makes
+the loser a no-op, and only a *new* chip movement can unlock the next grant. No cooldown
+column, no clock. It deliberately does not touch `welcome_grant_cents`, because that column
+is the non-clawbackable floor in Stars refund accounting. Relief is still bounded by each
+table's `min_bankroll_cents`, so $10 of house chips cannot buy into high-roller felt.
 
 ## 7. Write-budget note
 

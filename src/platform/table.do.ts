@@ -39,6 +39,7 @@ import { RULES, phaseDurationMs, type Phase } from '../game/rules.ts';
 import { normaliseChips } from '../game/betting.ts';
 import { settleHand, type Outcome, type SettledHand } from '../game/settlement.ts';
 import { applyLedgerOp, LedgerKeys } from '../lib/db/ledger.ts';
+import { ensureBustRelief, bustReliefCentsFrom } from '../lib/db/relief.ts';
 import { getTableConfig, writeHeartbeat, recordRound, ensureDefaultTables, type TableConfig } from '../lib/db/tablesRepo.ts';
 import { getMembership } from '../lib/db/privateTables.ts';
 import { getUser, displayName as dn } from '../lib/db/users.ts';
@@ -478,15 +479,27 @@ export class Table extends DurableObject<Env> {
       }
     }
     if (row.banned_at) return { t: 'ack', ref, ok: false, error: 'This account is suspended.', code: 'BANNED' };
-    if (row.bankroll_cents <= 0) return { t: 'ack', ref, ok: false, error: 'You are out of chips — buy more Stars to rebuy.', code: 'NEED_REBUY' };
+    // Reaching zero is not a Stars ultimatum. Credit the house relief first and take
+    // the credited figure forward, so a player who would have been refused simply
+    // sits. NEED_REBUY survives for the honest cases: relief disabled by config, or
+    // a grant that failed.
+    let bankrollCents = row.bankroll_cents;
+    if (bankrollCents === 0) {
+      const relief = await ensureBustRelief(this.env.DB, userId, this.reliefCents());
+      if (relief.granted) bankrollCents = relief.bankrollCents;
+      else if (relief.reason === 'failed') console.error('sit relief refused', userId, relief.detail);
+    }
+    if (bankrollCents <= 0) {
+      return { t: 'ack', ref, ok: false, error: 'You are out of chips — buy more Stars to rebuy.', code: 'NEED_REBUY' };
+    }
     // Seat price of admission. Echo asks for $10, which a $20 welcome stack clears
     // once; a table can demand more than the grant so free chips never buy in.
-    if (this.tableCfg.minBankrollCents > 0 && row.bankroll_cents < this.tableCfg.minBankrollCents) {
+    if (this.tableCfg.minBankrollCents > 0 && bankrollCents < this.tableCfg.minBankrollCents) {
       return {
         t: 'ack',
         ref,
         ok: false,
-        error: `This table needs ${formatCents(this.tableCfg.minBankrollCents)} on hand. You have ${formatCents(row.bankroll_cents)}.`,
+        error: `This table needs ${formatCents(this.tableCfg.minBankrollCents)} on hand. You have ${formatCents(bankrollCents)}.`,
         code: 'NEED_SEAT_MINIMUM',
       };
     }
@@ -498,7 +511,7 @@ export class Table extends DurableObject<Env> {
       userId,
       displayName: dn(row),
       username: row.username,
-      bankrollCents: row.bankroll_cents,
+      bankrollCents,
       pendingChips: [],
       pendingWagerCents: 0,
       escrowCents: 0,
@@ -716,6 +729,12 @@ export class Table extends DurableObject<Env> {
     if (!result.ok) return false;
     seat.bankrollCents = result.bankrollCents;
     return true;
+  }
+
+  /** Configured house top-up, read straight from env: AppConfig would mean passing
+   *  a whole config object into the DO for one number. */
+  private reliefCents(): number {
+    return bustReliefCentsFrom(this.env.BUST_RELIEF_CENTS, RULES.bustReliefCents);
   }
 
   private async readBankroll(userId: number): Promise<number | null> {
@@ -1030,6 +1049,15 @@ export class Table extends DurableObject<Env> {
         });
         if (r.ok) b.seat.bankrollCents = r.bankrollCents;
         else console.error(`payout failed round=${s.roundId} user=${b.seat.userId} code=${r.code}`);
+      }
+      // The moment a player used to stop being able to play. Crediting it inside the
+      // settlement loop means the per-viewer snapshot committed a few lines below
+      // already carries the new balance, so the client never renders an "out of
+      // chips" wall it has already solved. Keyed on the ledger row that took them to
+      // zero, so this cannot double-credit across a reconnect or a replayed round.
+      if (b.seat.bankrollCents === 0) {
+        const relief = await ensureBustRelief(this.env.DB, b.seat.userId, this.reliefCents());
+        if (relief.granted) b.seat.bankrollCents = relief.bankrollCents;
       }
       b.seat.committedCents = 0;
       b.seat.escrowCents = 0;

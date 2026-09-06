@@ -267,10 +267,10 @@ export async function paymentsForUser(db: D1Database, userId: number, limit = 20
 export async function ledgerTail(db: D1Database, userId: number, limit = 25) {
   const r = await db
     .prepare(
-      `SELECT id, cents_delta, reason, table_id, ref_id, created_at
+      `SELECT id, cents_delta, reason, table_id, ref_id, note, created_at
         FROM ledger_entries WHERE user_id = ?1 ORDER BY id DESC LIMIT ?2`,
     )
     .bind(userId, limit)
-    .all<{ id: number; cents_delta: number; reason: string; table_id: string | null; ref_id: string | null; created_at: string }>();
+    .all<{ id: number; cents_delta: number; reason: string; table_id: string | null; ref_id: string | null; note: string | null; created_at: string }>();
   return r.results ?? [];
 }

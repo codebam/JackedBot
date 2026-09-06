@@ -8,6 +8,7 @@
 // =============================================================================
 import { ensureUser, hasAcceptedAge, type UserRow } from '../db/users.ts';
 import { ensureWelcomeGrant } from '../db/welcome.ts';
+import { ensureBustRelief } from '../db/relief.ts';
 import { fromTgUser } from '../db/users.ts';
 import type { TelegramWebAppUser } from './initData.ts';
 import type { AppConfig } from '../config.ts';
@@ -18,6 +19,9 @@ export interface BootstrapResult {
   bankrollCents: number;
   welcomeGranted: boolean;
   welcomeCents: number;
+  /** True when this bootstrap minted the automatic $0 top-up. */
+  reliefGranted: boolean;
+  reliefCents: number;
   ageAccepted: boolean;
 }
 
@@ -34,13 +38,21 @@ export async function bootstrapUser(env: Env, cfg: AppConfig, tgUser: TelegramWe
 
   // `applyLedgerOp` already reports the post-write balance; prefer it, and only
   // re-read when we skipped the write so `user` cannot be stale.
-  const bankrollCents = grant.granted ? grant.bankrollCents : user.bankroll_cents;
+  let bankrollCents = grant.granted ? grant.bankrollCents : user.bankroll_cents;
+
+  // A brand-new account is never at zero here (the welcome stack lands first), so this
+  // only fires for an account that has actually run out. Order matters: relief reads
+  // MAX(ledger id), and the welcome credit has to be that row if it just happened.
+  const relief = await ensureBustRelief(env.DB, user.telegram_user_id, cfg.bustReliefCents);
+  if (relief.granted) bankrollCents = relief.bankrollCents;
 
   return {
     user,
     bankrollCents,
     welcomeGranted: grant.granted,
     welcomeCents: grant.granted ? grantCents : 0,
+    reliefGranted: relief.granted,
+    reliefCents: relief.granted ? cfg.bustReliefCents : 0,
     ageAccepted: hasAcceptedAge(user),
   };
 }

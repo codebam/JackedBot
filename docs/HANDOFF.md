@@ -65,3 +65,5 @@ build if the schema grows a withdrawal surface.)
 - `npm run deploy` now runs the smoke suite, so #3 must be fixed before it exits 0.
 - Consider `runDurableObjectAlarm` from `cloudflare:test` to test the state machine
   without waiting 15s per phase (pool 0.22 exports it; `fetchMock` no longer exists).
+
+- **Bust relief** (`src/lib/db/relief.ts`): $10 auto-credited at exactly $0, reason `admin_adjust` + `ref_id='bust_relief'`, idempotency key `relief:<user>:<last ledger id>`. Wired into `bootstrapUser`, DO `sit`, DO settlement. `BUST_RELIEF_CENTS=0` restores the old Stars-only NEED_REBUY wall.

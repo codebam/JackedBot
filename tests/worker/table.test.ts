@@ -15,6 +15,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   TABLE_ID,
   bankrollOf,
+  db,
   dbReady,
   doFetchWithTicket,
   doState,
@@ -23,6 +24,8 @@ import {
   seedUser,
   send,
 } from './harness.ts';
+import { RULES } from '../../src/game/rules.ts';
+import { BUST_RELIEF_REF_ID } from '../../src/lib/db/relief.ts';
 
 const ALICE = 700001;
 const BOB = 700002;
@@ -120,10 +123,20 @@ describe('server-authoritative redaction', () => {
 });
 
 describe('seat + wager rules through the real state machine', () => {
-  it('refuses to seat a player with no chips', async () => {
-    const { ack } = await send(CAROL, { t: 'sit' });
-    expect(ack?.ok).toBe(false);
-    expect(ack?.code).toBe('NEED_REBUY');
+  it('seats a player who arrived out of chips, funded by house relief', async () => {
+    // This used to assert NEED_REBUY. Zero chips is no longer a Stars ultimatum: the
+    // DO credits the configured relief and seats the player. NEED_REBUY now only
+    // fires when BUST_RELIEF_CENTS is 0 or the grant fails, and the disabled path is
+    // covered at the DB layer in relief.test.ts.
+    const { ack, view } = await send(CAROL, { t: 'sit' });
+    expect(ack?.ok ?? true).toBe(true);
+    expect(view?.you.bankrollCents).toBe(RULES.bustReliefCents);
+
+    const row = await db()
+      .prepare(`SELECT reason, ref_id FROM ledger_entries WHERE user_id = ?1 AND ref_id = ?2 LIMIT 1`)
+      .bind(CAROL, BUST_RELIEF_REF_ID)
+      .first<{ reason: string; ref_id: string }>();
+    expect(row?.reason).toBe('admin_adjust');
   });
 
   it('seats a funded player and assigns a seat index', async () => {
