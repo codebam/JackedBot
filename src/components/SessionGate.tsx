@@ -12,6 +12,7 @@
 // HMAC), and surfaces the age gate when it is still open.
 // =============================================================================
 import { useEffect, useState } from 'preact/hooks';
+import type { ComponentChildren } from 'preact';
 import { AgeGate } from './AgeGate.tsx';
 import { api, ApiError } from '../lib/client/api.ts';
 import { getInitData, isInTelegram, haptic } from '../lib/client/telegram.ts';
@@ -33,11 +34,18 @@ export interface SessionGateProps {
   /** Shown only while the client check is in flight or has failed. */
   pendingNotice?: string;
   onSession?: (s: Session) => void;
+  /**
+   * Content to show once the player is through. Rendering children was never
+   * implemented, so `<SessionGate><SomeForm client:load /></SessionGate>` silently
+   * dropped the island: the props type had no `children`, JSX accepted it anyway,
+   * and the page rendered its header and nothing else.
+   */
+  children?: ComponentChildren;
 }
 
 type Phase = 'checking' | 'gated' | 'ok' | 'no-session';
 
-export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, starsLabel, pendingNotice, onSession }: SessionGateProps) {
+export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, starsLabel, pendingNotice, onSession, children }: SessionGateProps) {
   // Start CLOSED. Mounting the overlay optimistically (as this used to) flashed the
   // 18+ dialog at players who had already accepted it, then hid it a moment later.
   const [phase, setPhase] = useState<Phase>(serverResolved && serverAgeAccepted === true ? 'ok' : 'checking');
@@ -99,5 +107,7 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
   // "open in Telegram" long after the client had authenticated.
   if (phase === 'checking' && pendingNotice) return <p class="alert">{pendingNotice}</p>;
   if (phase === 'no-session' && pendingNotice) return <p class="alert">{pendingNotice}</p>;
-  return null;
+  // 'ok' - and also the no-notice variants of checking/no-session, so a page that
+  // passes no pendingNotice still shows its content rather than a blank screen.
+  return <>{children ?? null}</>;
 }

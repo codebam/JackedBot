@@ -50,8 +50,13 @@ try {
     </header>
 
     {
-      /* Ellipsis is a JS string, not HTML text: a literal \u2026 inside a static
-         Astro attribute is emitted verbatim and renders as backslash-u-2026. */
+      /* Sibling, not a wrapper. Astro hydrates a nested island from the
+         <astro-island> markup the PARENT rendered during SSR, and this gate SSRs as
+         phase='checking' - so a form passed as its child would be absent from the
+         markup and never hydrate (which is how this page ended up rendering only its
+         header). SessionGate supplies the overlay and the notice; the form renders
+         always and the API refuses it truthfully (401 without initData, 428 until the
+         age gate is accepted), so nothing here depends on SSR knowing who you are. */
       <SessionGate
         client:load
         serverResolved={ageAccepted !== undefined}
@@ -59,10 +64,10 @@ try {
         houseWarning={cfg.houseWarning}
         starsLabel={starsLabel}
         pendingNotice={'Signing you in…'}
-      >
-        <CreateTableForm client:load />
-      </SessionGate>
+      />
     }
+
+    <CreateTableForm client:load />
   </main>
 </Base>
 
