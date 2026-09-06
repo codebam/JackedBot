@@ -85,7 +85,11 @@ export async function POST(context: APIContext): Promise<Response> {
     throw e;
   }
 
-  const path = `/table/${created.tableId}`;
+  // ?invite=1 is the membership redemption trigger, not decoration. Without it the
+  // link the owner copies opens a table the recipient is not a member of, and
+  // resolveTableAccess refuses them with NOT_A_MEMBER - a private table whose own
+  // invite link cannot be used to join it.
+  const path = `/table/${created.tableId}?invite=1`;
   return ok({
     tableId: created.tableId,
     stakes: stakes.value,
