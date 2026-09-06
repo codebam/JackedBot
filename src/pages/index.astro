@@ -146,11 +146,11 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
                 ) : null}
 
                 <a
-                  class={t.openSeats > 0 && me ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
-                  href={me ? `/table/${t.id}` : '#'}
-                  aria-disabled={!me || t.openSeats === 0}
+                  class={t.openSeats > 0 ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
+                  href={`/table/${t.id}`}
+                  aria-disabled={t.openSeats === 0}
                 >
-                  {me ? (t.openSeats > 0 ? 'Join table' : 'Table full — spectate') : 'Open in Telegram to play'}
+                  {t.openSeats > 0 ? 'Join table' : 'Table full — spectate'}
                 </a>
               </li>
             ))}
