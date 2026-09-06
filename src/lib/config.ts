@@ -133,3 +133,19 @@ export function miniAppLink(cfg: AppConfig, path: string = cfg.miniAppPath, star
     ? `https://t.me/${cfg.botUsername}?app=${encodeURIComponent(url)}`
     : url;
 }
+
+/**
+ * The URL for an inline keyboard `web_app` button.
+ *
+ * This is NOT the same thing as miniAppLink(). Telegram validates web_app.button
+ * URLs against the bot's registered Mini App domain and rejects the
+ * `https://t.me/<bot>?app=<url>` share-link form with
+ *   "Bad Request: BUTTON_URL_INVALID"
+ * which took down the button on /start, /balance and /tables at once. The t.me
+ * form is only for `url:` buttons and chat links; a web_app button must receive
+ * the plain https origin+path.
+ */
+export function webAppUrl(cfg: AppConfig, path: string = cfg.miniAppPath): string {
+  const clean = path.startsWith('/') ? path : `/${path}`;
+  return absoluteUrl(cfg, clean);
+}

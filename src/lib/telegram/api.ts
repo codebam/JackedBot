@@ -204,14 +204,31 @@ export class TelegramBot {
   }
 
   // -- messaging ------------------------------------------------------------
-  sendMessage(chatId: number, text: string, extra: Record<string, unknown> = {}) {
-    return this.call<Message>('sendMessage', {
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-      ...extra,
-    });
+  async sendMessage(chatId: number, text: string, extra: Record<string, unknown> = {}) {
+    try {
+      return await this.call<Message>('sendMessage', {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        ...extra,
+      });
+    } catch (e) {
+      // Telegram rejects the ENTIRE message when one entity fails to parse
+      // ("Bad Request: can't parse entities: …"). That 400 used to propagate out
+      // of the webhook as a 5xx and then be redelivered forever. One bad
+      // interpolation must not cost the player their reply: drop the markup and
+      // resend the same text literally.
+      if (!(e instanceof TelegramApiError) || !/parse entities|unresolvable|unsupported style|file id/i.test(e.description)) throw e;
+      console.warn(`sendMessage: HTML rejected (${e.description}); retrying chat ${chatId} as plain text`);
+      const { parse_mode: _omit, ...rest } = extra;
+      return this.call<Message>('sendMessage', {
+        chat_id: chatId,
+        text: stripHtml(text),
+        disable_web_page_preview: true,
+        ...rest,
+      });
+    }
   }
 
   editMessageText(chatId: number, messageId: number, text: string, extra: Record<string, unknown> = {}) {
@@ -322,4 +339,20 @@ export function esc(s: string | number | null | undefined): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+/**
+ * Strip the Bot API HTML entities this app emits, so a message Telegram refused
+ * to parse can still be delivered as literal text.
+ */
+export function stripHtml(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:b|strong|i|em|u|ins|s|strike|span|p|pre|code|a)\s*>/gi, '')
+    .replace(/<(?:b|strong|i|em|u|ins|s|strike|span|p|a|pre|code)\b[^>]*>/gi, '')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
 }

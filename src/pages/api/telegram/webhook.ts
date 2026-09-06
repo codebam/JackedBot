@@ -62,6 +62,14 @@ export async function POST(context: APIContext): Promise<Response> {
       console.warn(`dropped update ${update.update_id}: ${e.code} ${e.description}`);
       return Response.json({ ok: true, handled: 'dropped_undeliverable' });
     }
+    // Any other Bot API 4xx is a request WE built wrong, not a transient fault.
+    // Retrying can't fix it and would redeliver a doomed update forever, so ACK —
+    // but log at error level with the description, because this is exactly where
+    // HTML parse errors and bad payloads used to hide.
+    if (e instanceof TelegramApiError && e.code >= 400 && e.code < 500) {
+      console.error(`BUG: Bot API rejected our request on update ${update.update_id}: ${e.code} ${e.description}`);
+      return Response.json({ ok: true, handled: 'dropped_bad_request', code: e.code, description: e.description });
+    }
     // Everything else (D1 blip, unexpected throw) is worth retrying, and every
     // handler is idempotent, so a redelivery is safe.
     console.error('webhook handler failed', update.update_id, e);

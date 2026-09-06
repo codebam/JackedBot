@@ -6,7 +6,7 @@
 // explicitly so nobody mistakes it for a purchase they made.
 // =============================================================================
 import { formatCents } from '../../shared/money.ts';
-import { miniAppLink, type AppConfig } from '../config.ts';
+import { miniAppLink, webAppUrl, type AppConfig } from '../config.ts';
 import { getPlayerSummary, listLobbyTables, recentHands } from '../db/tablesRepo.ts';
 import { ledgerTail, paymentsForUser, refundAndClawback, recentPayments } from '../db/payments.ts';
 import { acceptAgeGate, getUser, hasAcceptedAge, isAdmin } from '../db/users.ts';
@@ -74,7 +74,7 @@ Before the tables, I need one confirmation.`,
   await c.bot.sendMessage(c.message.chat.id, lines.join('\n'), {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🃏 Open the lobby', web_app: { url: miniAppLink(c.cfg, '/lobby') } }],
+        [{ text: '🃏 Open the lobby', web_app: { url: webAppUrl(c.cfg, '/') } }],
         [
           { text: '💵 Buy chips', callback_data: 'buyin' },
           { text: 'ℹ️ Rules', callback_data: 'help' },
@@ -113,7 +113,7 @@ export async function cmdHelp(c: CommandContext): Promise<void> {
 
 <b>Age policy</b>
 18+ only. ${esc(c.cfg.houseWarning)}`,
-    { reply_markup: { inline_keyboard: [[{ text: '🃏 Open the lobby', web_app: { url: miniAppLink(c.cfg, '/lobby') } }]] } },
+    { reply_markup: { inline_keyboard: [[{ text: '🃏 Open the lobby', web_app: { url: webAppUrl(c.cfg, '/') } }]] } },
   );
 }
 
@@ -140,7 +140,7 @@ Wagered ${esc(formatCents(summary.wagered_cents))} · net ${esc(formatCents(summ
     reply_markup: {
       inline_keyboard: [
         [{ text: '💵 Buy chips', callback_data: 'buyin' }],
-        [{ text: '🃏 Lobby', web_app: { url: miniAppLink(c.cfg, '/lobby') } }],
+        [{ text: '🃏 Lobby', web_app: { url: webAppUrl(c.cfg, '/') } }],
       ],
     },
   });
@@ -183,7 +183,7 @@ export async function cmdTables(c: CommandContext): Promise<void> {
   }
   const rows = tables.map((t) => {
     const stakes = `${formatCents(t.minBetCents)}–${formatCents(t.maxBetCents)}`;
-    return { text: `${t.name} · ${t.activeSeats}/${t.seatCount} seats · ${stakes}`, web_app: { url: miniAppLink(c.cfg, `/table/${t.id}`) } };
+    return { text: `${t.name} · ${t.activeSeats}/${t.seatCount} seats · ${stakes}`, web_app: { url: webAppUrl(c.cfg, `/table/${t.id}`) } };
   });
   await c.bot.sendMessage(c.message.chat.id, `<b>Open tables</b>\nPlay money only — ${esc(formatCents(c.cfg.rules.starsToCentsPerStar))} per Star.`, {
     reply_markup: { inline_keyboard: rows.map((r) => [r]) },
@@ -243,24 +243,46 @@ export async function handleCallback(c: { env: Env; cfg: AppConfig; bot: Telegra
   if (data === 'age:accept') {
     await bootstrapUser(c.env, c.cfg, user);
     await acceptAgeGate(c.env.DB, user.id, AGE_GATE_STATEMENT);
-    await c.bot.answerCallbackQuery(c.query.id, 'Confirmed — welcome aboard.');
+    // A callback query id is answerable only briefly and only once; a re-tapped old
+// card yields QUERY_ID_INVALID (400). That used to abort the handler *after* the
+// age gate was already accepted, so the webhook 500'd and Telegram redelivered a
+// no-op forever. The acknowledgement is cosmetic — never let it break the flow.
+await safeAnswer(c.bot, c.query.id, 'Confirmed — welcome aboard.');
     if (!c.query.message) return;
     await cmdStart({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message, user });
     return;
   }
 
+  if (data === 'buyin' || data.startsWith('buyin:')) {
+    // 'buyin' (no suffix) is what cmdStart/cmdBalance actually render, so this is
+    // the only branch that makes the 💵 button work.
+    await safeAnswer(c.bot, c.query.id);
+    if (!c.query.message) return;
+    await cmdBuy({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message, user });
+    return;
+  }
+
   if (data === 'help') {
-    await c.bot.answerCallbackQuery(c.query.id);
+    await safeAnswer(c.bot, c.query.id);
     if (!c.query.message) return;
     await cmdHelp({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message, user });
     return;
   }
 
   if (data === 'buyin') {
-    await c.bot.answerCallbackQuery(c.query.id);
+    await safeAnswer(c.bot, c.query.id);
     await cmdBuy({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message!, user });
     return;
   }
 
   await c.bot.answerCallbackQuery(c.query.id, 'Unknown button.');
+}
+
+/** answerCallbackQuery is fire-and-forget by nature: swallow its failures. */
+async function safeAnswer(bot: TelegramBot, queryId: string, text?: string): Promise<void> {
+  try {
+    await bot.answerCallbackQuery(queryId, text);
+  } catch (e) {
+    console.warn(`answerCallbackQuery failed (query ${queryId}): ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
