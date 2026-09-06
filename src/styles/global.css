@@ -1544,3 +1544,17 @@ code {
   border-color: var(--gold, #d8b45a);
   outline: none;
 }
+
+/* Action row on a table card. `margin-top: auto` used to sit on .tcard__cta, which
+   pinned the single button to the card's bottom edge; a card can now hold Open and
+   Close, so the row takes the pin and the buttons share it. */
+.tcard__actions {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tcard__actions .btn--primary {
+  flex: 1;
+}
