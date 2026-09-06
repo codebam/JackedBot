@@ -90,8 +90,11 @@ if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
       )
     }
 
-    {
-      found && !me ? <p class="alert">{note ?? 'Signing you in with Telegram…'}</p> : null
-    }
+    <!-- Not rendered. This mirrored the lobby bug twice now: `me` comes from SSR,
+         which cannot see initData (Telegram passes it to the WebApp client object),
+         so inside Telegram it is always null and the page told authenticated
+         players to open the link inside Telegram. SessionGate owns session state
+         and shows a notice only while checking or with a genuinely absent session;
+         `note` above still explains a missing/closed table, which IS SSR-known. -->
   </main>
 </Base>
