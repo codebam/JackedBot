@@ -4,12 +4,12 @@
 // countdown; the Preact island then takes over from the WebSocket.
 import Base from '../../layouts/Base.astro';
 import { GameTable } from '../../components/GameTable.tsx';
-import { AgeGate } from '../../components/AgeGate.tsx';
+import { SessionGate } from '../../components/SessionGate.tsx';
 import { env } from 'cloudflare:workers';
 import { getConfig } from '../../lib/config.ts';
 import { normalizeInitData } from '../../lib/auth.ts';
 import { validateInitData } from '../../lib/telegram/initData.ts';
-import { bootstrapUser, AGE_GATE_STATEMENT } from '../../lib/telegram/session.ts';
+import { bootstrapUser } from '../../lib/telegram/session.ts';
 import { getTableConfig, ensureDefaultTables } from '../../lib/db/tablesRepo.ts';
 import { tableView } from '../../lib/table-client.ts';
 import { publicRules } from '../../platform/table.do.ts';
@@ -61,9 +61,15 @@ if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
 <Base title={`${tableId} · JackedBot`} boot={{ initData: Astro.url.searchParams.get('tgWebAppData') ?? undefined }}>
   <main class="page">
     {
-      me && !me.ageAccepted ? (
-        <AgeGate client:load statement={AGE_GATE_STATEMENT} houseWarning={cfg.houseWarning} starsLabel={formatCents(cfg.centsPerStar)} onAccepted={() => undefined} />
-      ) : null
+      /* Same rule as the lobby: the client re-authenticates with initData from the
+         WebApp object, so a missing URL parameter never becomes a dead end. */
+      <SessionGate
+        client:load
+        serverResolved={Boolean(me)}
+        serverAgeAccepted={me ? me.ageAccepted : undefined}
+        houseWarning={cfg.houseWarning}
+        starsLabel={formatCents(cfg.centsPerStar)}
+      />
     }
 
     {
@@ -72,7 +78,7 @@ if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
           <h1>{note ?? 'Table unavailable'}</h1>
           <a class="btn btn--primary" href="/">Back to the lobby</a>
         </div>
-      ) : me ? (
+      ) : (
         <GameTable
           client:load
           tableId={tableId}
@@ -81,13 +87,11 @@ if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
           initialRules={publicRules()}
           houseWarning={cfg.houseWarning}
         />
-      ) : (
-        <div class="table table--missing">
-          <h1>Telegram session required</h1>
-          <p>{note}</p>
-          <a class="btn btn--primary" href="/">Back to the lobby</a>
-        </div>
       )
+    }
+
+    {
+      found && !me ? <p class="alert">{note ?? 'Signing you in with Telegram…'}</p> : null
     }
   </main>
 </Base>

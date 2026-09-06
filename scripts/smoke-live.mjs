@@ -88,11 +88,23 @@ if (!WEBHOOK_SECRET) {
     if (!ok) failures++;
     console.log(`${ok ? '✓' : '✗'} lobby HTML contains "${needle}"`);
   }
-  // Guardrail: the public page must never promise a withdrawal path.
-  for (const bad of ['withdraw', 'cash out', 'redeem for']) {
-    const ok = !html.toLowerCase().includes(bad);
-    if (!ok) failures++;
-    console.log(`${ok ? '✓' : '✗'} lobby HTML does not offer "${bad}"`);
+  // Guardrail: no withdrawal *affordance*. Match interactive markup, not prose —
+  // the age-gate copy legitimately says "there is no withdrawal path in this app",
+  // and a bare substring check failed on that sentence forever. The structural
+  // guarantee lives in tests/unit/schema.test.ts; this only catches UI drift.
+  const affordances = [];
+  const checks = [
+    ['withdraw button/link', /<\s*(button|a)\b[^>]*>[^<]{0,40}withdraw/i],
+    ['withdraw route href', /href=["'][^"']*withdraw/i],
+    ['withdraw form field', /name=["'][^"']*withdraw/i],
+    ['withdraw data-action', /data-action=["']withdraw/i],
+    ['cash-out control', /<\s*(button|a)\b[^>]*>[^<]{0,40}cash\s*out/i],
+    ['redeem control', /<\s*(button|a)\b[^>]*>[^<]{0,40}redeem/i],
+  ];
+  for (const [label, re] of checks) {
+    const found = re.test(html);
+    if (found) { failures++; affordances.push(label); }
+    console.log(`${found ? '✗' : '✓'} lobby HTML has no ${label}`);
   }
 }
 

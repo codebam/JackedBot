@@ -133,9 +133,16 @@ export class TelegramBot {
   async call<T>(method: string, payload: Record<string, unknown> = {}, opts: CallOptions = {}): Promise<T> {
     const { timeoutMs = 8_000, retryOn429 = true } = opts;
     const url = `${TELEGRAM_API_BASE}/bot${this.token}/${method}`;
+    // Detach the injected fetch into a local binding on purpose. Calling it as
+    // `this.fetchImpl(url)` passes the TelegramBot instance as the receiver, and
+    // the Workers global `fetch` rejects a foreign `this` with
+    //   "Illegal invocation: function called with incorrect `this` reference"
+    // which silently broke every sendMessage/reply while still writing the user
+    // row first — so /start looked like it was ignored.
+    const fetchFn = this.fetchImpl;
 
     const attempt = async (): Promise<Response> =>
-      this.fetchImpl(url, {
+      fetchFn(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(stripUndefined(payload)),
