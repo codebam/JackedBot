@@ -103,13 +103,13 @@ describe('buildInlineResults', () => {
     const tables = [table({ id: 'c'.repeat(32), name: 'Beach' }), table({ id: 'd'.repeat(32), name: 'Mountain' })];
     expect(buildInlineResults({ query: 'bea', tables, appUrl }).map((r) => r.title)).toEqual(['Beach · yours']);
     // Typing half a slug must not resolve to a table.
-    expect(buildInlineResults({ query: 'dddd', tables, appUrl })[0]?.id).toBe('help:none');
+    expect(buildInlineResults({ query: 'dddd', tables, appUrl })[0]?.id).toBe('help-none');
   });
 
   it('degrades to a help row instead of an empty picker', () => {
     const rs = buildInlineResults({ query: 'nothing matches', tables: [], appUrl, createUrl: appUrl('/new-table') });
     expect(rs).toHaveLength(1);
-    expect(rs[0]!.id).toBe('help:none');
+    expect(rs[0]!.id).toBe('help-none');
     expect(JSON.stringify(rs)).toContain('/new-table');
   });
 
@@ -188,5 +188,30 @@ describe('seatCount is a count of people, not money', () => {
     }
     expect(stakes({ seatCount: 2.5 }).ok).toBe(false);
     expect(stakes({ seatCount: '5' }).ok).toBe(false);
+  });
+});
+
+describe('Telegram wire-format rules the API enforces and TypeScript does not', () => {
+  const ID_CHARSET = /^[A-Za-z0-9_-]{1,64}$/;
+
+  // answerInlineQuery rejects the entire batch if any result id falls outside this
+  // charset, and the client renders that as a plain "No results". The pre-existing
+  // id test checked length and uniqueness, which let `t:<hex>` through to production.
+  it('uses only [A-Za-z0-9_-] in every inline result id, including the help row', () => {
+    const appUrl = (p: string) => `https://app.example${p}`;
+    const rows = buildInlineResults({ query: '', tables: [table({})], appUrl });
+    for (const r of rows) expect(r.id).toMatch(ID_CHARSET);
+    const help = buildInlineResults({ query: '', tables: [], appUrl });
+    expect(help.length).toBeGreaterThan(0);
+    for (const r of help) expect(r.id).toMatch(ID_CHARSET);
+  });
+
+  // t.me/<bot>?app=<url> takes the URL raw; percent-encoding produces a link that
+  // opens nothing. Asserted against source because miniAppLink needs a full AppConfig
+  // and the invariant is about which expression is interpolated, not about runtime.
+  it('interpolates the raw app URL into the t.me deep link', () => {
+    const src = readFileSync('src/lib/config.ts', 'utf8');
+    expect(src).toMatch(/\?app=\$\{url\}/);
+    expect(src).not.toMatch(/\?app=\$\{encodeURIComponent/);
   });
 });

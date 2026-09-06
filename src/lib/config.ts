@@ -130,7 +130,10 @@ export function miniAppLink(cfg: AppConfig, path: string = cfg.miniAppPath, star
   const clean = path.startsWith('/') ? path : `/${path}`;
   const url = absoluteUrl(cfg, startParam ? `${clean}${clean.includes('?') ? '&' : '?'}startapp=${startParam}` : clean);
   return cfg.botUsername
-    ? `https://t.me/${cfg.botUsername}?app=${encodeURIComponent(url)}`
+    // The inner URL must stay RAW. Telegram's t.me deep link takes everything after
+    // ?app= as a literal URL, so percent-encoding it yields a link that opens nothing
+    // (https://t.me/JackedBot?app=https%3A%2F%2F... was copied straight to chat).
+    ? `https://t.me/${cfg.botUsername}?app=${url}`
     : url;
 }
 

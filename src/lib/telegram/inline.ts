@@ -105,7 +105,10 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
     const open = Math.max(0, t.seatCount - t.activeSeats);
     return {
       type: 'article',
-      id: `t:${t.id}`,
+      // Telegram restricts result ids to [A-Za-z0-9_-], 1-64 bytes. A colon anywhere in ANY
+      // result id makes answerInlineQuery reject the WHOLE batch (RESULT_ID_INVALID),
+      // which the client shows as a bare "No results" with no hint of the cause.
+      id: `t-${t.id}`,
       title: clip(`${t.name}${t.role === 'owner' ? ' · yours' : ''}`, TITLE_MAX),
       description: clip(`${stakes(t)} · ${open} ${seatWord} open`, DESC_MAX),
       input_message_content: {
@@ -130,7 +133,7 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
   return [
     {
       type: 'article',
-      id: 'help:none',
+      id: 'help-none',
       title: args.createUrl ? 'Create a private table first' : 'No private tables to share',
       description: args.createUrl
         ? 'Open the app and create a table, then come back here to post its Join button.'
