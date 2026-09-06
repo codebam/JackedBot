@@ -40,7 +40,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@types/node": "^26.0.0",
     "@vitest/runner": "^4.1.11",
     "@vitest/snapshot": "^4.1.11",
