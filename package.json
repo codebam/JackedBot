@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Telegram Multiplayer Blackjack Mini App \u2014 Astro SSR + Preact islands on Cloudflare Workers (D1 + Durable Objects)",
+  "description": "Telegram Multiplayer Blackjack Mini App — Astro SSR + Preact islands on Cloudflare Workers (D1 + Durable Objects)",
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
-    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@types/node": "^26.0.0",
     "@vitest/runner": "^4.1.11",
     "@vitest/snapshot": "^4.1.11",
@@ -55,6 +55,6 @@
   "allowScripts": {
     "esbuild@0.28.1": true,
     "workerd@1.20260903.1": true,
-    "workerd@1.20260722.1": true
+    "workerd@1.20260815.1": true
   }
 }
