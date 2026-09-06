@@ -1,0 +1,161 @@
+---
+// / — the lobby. Rendered on the edge from D1 (no Durable Object is woken to draw
+// this page), then hydrated with two islands: the age gate and the wallet.
+import Base from '../layouts/Base.astro';
+import { AgeGate } from '../components/AgeGate.tsx';
+import { WalletBar } from '../components/WalletBar.tsx';
+import { env } from 'cloudflare:workers';
+import { getConfig, resolveOrigin } from '../lib/config.ts';
+import { normalizeInitData } from '../lib/auth.ts';
+import { validateInitData } from '../lib/telegram/initData.ts';
+import { bootstrapUser, AGE_GATE_STATEMENT } from '../lib/telegram/session.ts';
+import { ensureDefaultTables, listLobbyTables } from '../lib/db/tablesRepo.ts';
+import { formatCents } from '../shared/money.ts';
+import type { LobbyTable } from '../shared/protocol.ts';
+
+const cfg = getConfig(env as unknown as Env, Astro.request.url);
+
+// Server-side identity is optional on this route: an unauthenticated visitor gets a
+// preview lobby, and every privileged action still requires verified initData.
+const rawInit = normalizeInitData(Astro.url.searchParams.get('tgWebAppData') ?? (Astro.request.headers.get('x-telegram-init-data') ?? ''));
+let tables: LobbyTable[] = [];
+let me: { userId: number; name: string; bankrollCents: number; ageAccepted: boolean; welcomeGranted: boolean } | null = null;
+let authNote: string | null = null;
+
+try {
+  const check = rawInit ? await validateInitData(rawInit, { botToken: cfg.botToken, maxAgeSeconds: cfg.initDataMaxAgeSeconds }) : null;
+  if (check?.ok) {
+    const boot = await bootstrapUser(env as unknown as Env, cfg, check.data.user);
+    me = {
+      userId: boot.user.telegram_user_id,
+      name: boot.user.username ? `@${boot.user.username}` : boot.user.first_name ?? 'player',
+      bankrollCents: boot.bankrollCents,
+      ageAccepted: boot.ageAccepted,
+      welcomeGranted: boot.welcomeGranted,
+    };
+  } else {
+    authNote = check ? `Session check failed (${check.reason}). Open this page inside Telegram to play.` : 'Open this page inside Telegram to play.';
+  }
+  await ensureDefaultTables(env.DB);
+  tables = await listLobbyTables(env.DB);
+} catch (e) {
+  authNote = `Lobby unavailable: ${(e as Error).message}`;
+}
+
+const starsLabel = formatCents(cfg.centsPerStar);
+// Handed to the islands so the very first client render already has a session to
+// offer, instead of waiting on a round trip to /api/session.
+const boot: Record<string, unknown> = { initData: rawInit || undefined, me, origin: resolveOrigin(env as unknown as Env, Astro.request.url) };
+---
+
+<Base title="JackedBot · Lobby" boot={boot}>
+  <main class="lobby">
+    <header class="lobby__head">
+      <div>
+        <h1>Jacked<span>Bot</span></h1>
+        <p class="lobby__sub">Multiplayer blackjack · play money only</p>
+      </div>
+      {
+        me ? (
+          <WalletBar
+            client:load
+            initialBankrollCents={me.bankrollCents}
+            starsPerPurchase={cfg.buyIn.stars}
+            centsPerStar={cfg.centsPerStar}
+            compact
+          />
+        ) : null
+      }
+    </header>
+
+    {
+      me && !me.ageAccepted ? (
+        <AgeGate client:load statement={AGE_GATE_STATEMENT} houseWarning={cfg.houseWarning} starsLabel={starsLabel} onAccepted={() => undefined} />
+      ) : null
+    }
+
+    {
+      me?.welcomeGranted ? (
+        <p class="lobby__welcome" role="status">
+          🎁 A free <b>{formatCents(cfg.welcomeGrantCents)}</b> starter stack is in your wallet — that's two Stars' worth of chips.
+          No purchase was made, and it can't be cashed out.
+        </p>
+      ) : null
+    }
+
+    {authNote ? <p class="alert">{authNote}</p> : null}
+
+    <section class="lobby__tables">
+      <h2 class="lobby__h2">Open tables</h2>
+      {
+        tables.length === 0 ? (
+          <p class="lobby__empty">No tables yet. They appear as soon as the database is migrated.</p>
+        ) : (
+          <ul class="tcards">
+            {tables.map((t) => (
+              <li class={`tcard tcard--${t.phase}`} data-open={t.openSeats > 0}>
+                <div class="tcard__top">
+                  <h3>{t.name}</h3>
+                  <span class={`tbadge tbadge--${t.status}`}>{t.status === 'open' ? t.phase.toLowerCase() : t.status}</span>
+                </div>
+
+                <div class="tcard__stats">
+                  <div>
+                    <span class="k">Seats</span>
+                    <b>
+                      {t.activeSeats}/{t.seatCount}
+                    </b>
+                  </div>
+                  <div>
+                    <span class="k">Stakes</span>
+                    <b>
+                      {formatCents(t.minBetCents)}–{formatCents(t.maxBetCents)}
+                    </b>
+                  </div>
+                  <div>
+                    <span class="k">Buy-in</span>
+                    <b>{formatCents(t.buyInCents)}</b>
+                  </div>
+                  {t.preview?.dealerUpCard !== null && t.preview?.dealerUpCard !== undefined ? (
+                    <div>
+                      <span class="k">Pot</span>
+                      <b>{formatCents(t.preview.potCents)}</b>
+                    </div>
+                  ) : null}
+                </div>
+
+                {t.minBankrollCents > 0 && me && me.bankrollCents < t.minBankrollCents ? (
+                  <p class="tcard__gate">Needs {formatCents(t.minBankrollCents)} on hand — you have {formatCents(me.bankrollCents)}.</p>
+                ) : null}
+
+                <a
+                  class={t.openSeats > 0 && me ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
+                  href={me ? `/table/${t.id}` : '#'}
+                  aria-disabled={!me || t.openSeats === 0}
+                >
+                  {me ? (t.openSeats > 0 ? 'Join table' : 'Table full — spectate') : 'Open in Telegram to play'}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </section>
+
+    <section class="lobby__how">
+      <h2 class="lobby__h2">How the money works</h2>
+      <ol class="lobby__steps">
+        <li>
+          <b>1 ⭐ = {starsLabel} of chips.</b> Buy with the button above; Telegram handles the payment.
+        </li>
+        <li>
+          <b>Chips are play money.</b> There is no cashout, no transfer and no prize. They cannot become Stars, TON or currency.
+        </li>
+        <li>
+          <b>Out of chips?</b> Buy again — stacks add together across purchases.
+        </li>
+      </ol>
+      <p class="lobby__fine">{cfg.houseWarning}</p>
+    </section>
+  </main>
+</Base>

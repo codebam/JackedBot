@@ -1,0 +1,93 @@
+---
+// /table/[id] — the felt. The page is server-rendered with a real snapshot when the
+// visitor has valid initData, so the first paint shows actual cards and an actual
+// countdown; the Preact island then takes over from the WebSocket.
+import Base from '../../layouts/Base.astro';
+import { GameTable } from '../../components/GameTable.tsx';
+import { AgeGate } from '../../components/AgeGate.tsx';
+import { env } from 'cloudflare:workers';
+import { getConfig } from '../../lib/config.ts';
+import { normalizeInitData } from '../../lib/auth.ts';
+import { validateInitData } from '../../lib/telegram/initData.ts';
+import { bootstrapUser, AGE_GATE_STATEMENT } from '../../lib/telegram/session.ts';
+import { getTableConfig, ensureDefaultTables } from '../../lib/db/tablesRepo.ts';
+import { tableView } from '../../lib/table-client.ts';
+import { publicRules } from '../../platform/table.do.ts';
+import { formatCents } from '../../shared/money.ts';
+import type { TableView, YouView } from '../../shared/protocol.ts';
+
+const cfg = getConfig(env as unknown as Env, Astro.request.url);
+const tableId = (Astro.params.id ?? '').toLowerCase();
+
+let found = false;
+let note: string | null = null;
+let me: { userId: number; bankrollCents: number; ageAccepted: boolean } | null = null;
+let initialTable: TableView | null = null;
+let initialYou: YouView | null = null;
+
+if (!/^[a-z0-9][a-z0-9_-]{1,31}$/.test(tableId)) {
+  note = 'Unknown table.';
+} else {
+  try {
+    await ensureDefaultTables(env.DB);
+    const tableCfg = await getTableConfig(env.DB, tableId);
+    if (!tableCfg) {
+      note = 'That table does not exist.';
+    } else if (tableCfg.status === 'closed') {
+      note = 'That table has closed.';
+    } else {
+      found = true;
+      const rawInit = normalizeInitData(Astro.url.searchParams.get('tgWebAppData') ?? (Astro.request.headers.get('x-telegram-init-data') ?? ''));
+      const check = rawInit ? await validateInitData(rawInit, { botToken: cfg.botToken, maxAgeSeconds: cfg.initDataMaxAgeSeconds }) : null;
+      if (check?.ok) {
+        const boot = await bootstrapUser(env as unknown as Env, cfg, check.data.user);
+        me = { userId: boot.user.telegram_user_id, bankrollCents: boot.bankrollCents, ageAccepted: boot.ageAccepted };
+        // One extra round trip buys a fully rendered table on first paint.
+        const snapshot = await tableView(env as unknown as Env, tableId, boot.user.telegram_user_id);
+        if (snapshot) {
+          initialTable = snapshot.table;
+          initialYou = { ...snapshot.you, bankrollCents: boot.bankrollCents, ageAccepted: boot.ageAccepted };
+        }
+      } else {
+        note = check ? `Session rejected (${check.reason}).` : 'Open this link inside Telegram to play.';
+      }
+    }
+  } catch (e) {
+    note = `Table unavailable: ${(e as Error).message}`;
+  }
+}
+---
+
+<Base title={`${tableId} · JackedBot`} boot={{ initData: Astro.url.searchParams.get('tgWebAppData') ?? undefined }}>
+  <main class="page">
+    {
+      me && !me.ageAccepted ? (
+        <AgeGate client:load statement={AGE_GATE_STATEMENT} houseWarning={cfg.houseWarning} starsLabel={formatCents(cfg.centsPerStar)} onAccepted={() => undefined} />
+      ) : null
+    }
+
+    {
+      !found ? (
+        <div class="table table--missing">
+          <h1>{note ?? 'Table unavailable'}</h1>
+          <a class="btn btn--primary" href="/">Back to the lobby</a>
+        </div>
+      ) : me ? (
+        <GameTable
+          client:load
+          tableId={tableId}
+          initialState={initialTable}
+          initialYou={initialYou}
+          initialRules={publicRules()}
+          houseWarning={cfg.houseWarning}
+        />
+      ) : (
+        <div class="table table--missing">
+          <h1>Telegram session required</h1>
+          <p>{note}</p>
+          <a class="btn btn--primary" href="/">Back to the lobby</a>
+        </div>
+      )
+    }
+  </main>
+</Base>

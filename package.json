@@ -1,0 +1,56 @@
+{
+  "name": "jackedbot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram Multiplayer Blackjack Mini App \u2014 Astro SSR + Preact islands on Cloudflare Workers (D1 + Durable Objects)",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro build && astro preview",
+    "deploy": "astro build && wrangler deploy",
+    "types": "wrangler types",
+    "postinstall": "wrangler types || true",
+    "db:create": "wrangler d1 create jackedbot-db",
+    "db:migrate:local": "wrangler d1 migrations apply jackedbot-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply jackedbot-db --remote",
+    "db:seed:local": "wrangler d1 execute jackedbot-db --local --file=./scripts/seed.sql",
+    "db:shell:local": "wrangler d1 execute jackedbot-db --local --command \"SELECT telegram_user_id, username, bankroll_cents FROM users ORDER BY bankroll_cents DESC LIMIT 20\"",
+    "db:drift:local": "wrangler d1 execute jackedbot-db --local --command \"SELECT * FROM v_ledger_drift\"",
+    "db:drift:remote": "wrangler d1 execute jackedbot-db --remote --command \"SELECT * FROM v_ledger_drift\"",
+    "secrets:set": "bash ./scripts/set-secrets.sh",
+    "telegram:webhook": "node scripts/set-webhook.mjs",
+    "telegram:menu": "node scripts/set-menu-button.mjs",
+    "test": "npm run test:unit && npm run test:worker",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:worker": "vitest run --config vitest.workers.config.ts",
+    "test:watch": "vitest",
+    "check": "npm run types && npm run gen && npm run imports && astro check && tsc --noEmit && npm run test",
+    "gen": "node scripts/sync-migration.mjs && node scripts/gen-test-schema.mjs",
+    "check:sync": "node scripts/sync-migration.mjs --check && node scripts/gen-test-schema.mjs --check",
+    "imports": "node scripts/check-imports.mjs src",
+    "e2e:ws": "node scripts/e2e-ws.mjs"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.3.0",
+    "@astrojs/preact": "^6.0.5",
+    "astro": "^7.3.1",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@types/node": "^26.0.0",
+    "@vitest/runner": "^4.1.11",
+    "@vitest/snapshot": "^4.1.11",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.129.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "workerd@1.20260903.1": true,
+    "workerd@1.20260722.1": true
+  }
+}

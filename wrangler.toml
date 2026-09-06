@@ -1,0 +1,86 @@
+# =============================================================================
+# JackedBot — Cloudflare Worker configuration
+# One Worker ships the Astro SSR site AND the Table Durable Object class.
+#
+# `main` points at our own Worker entrypoint (not Astro's default) precisely so
+# we can export the Durable Object class next to the Astro request handler.
+# See docs/ARCHITECTURE.md.
+#
+# Replace the three <placeholder> values before the first deploy (or delete
+# `database_id` and let `wrangler deploy` provision + fill it in for you).
+# =============================================================================
+name = "jackedbot"
+main = "./src/worker.ts"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Publishes https://jackedbot.<account-subdomain>.workers.dev — this is the URL
+# you hand to @BotFather / setBotMenuButton. See README "Deploy".
+workers_dev = true
+preview_urls = true
+
+# Astro emits the browser bundle + prerendered pages here; the Worker serves them
+# straight off the Assets binding, so there is no separate static host.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# ---------------------------------------------------------------------------
+# D1 — users, ledger, payments, hand history
+# ---------------------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "jackedbot-db"
+# Replace with the real uuid from `npx wrangler d1 create jackedbot-db`.
+# The zero uuid below parses but does not exist: remote deploys will fail until
+# you swap it (or delete the line and let `wrangler deploy` auto-provision it).
+database_id = "0ca19432-b99d-4241-b921-028fdf4f08e0"
+migrations_dir = "./migrations"
+
+# ---------------------------------------------------------------------------
+# Durable Objects — one instance per blackjack table
+# ---------------------------------------------------------------------------
+[[durable_objects.bindings]]
+name = "TABLE"
+class_name = "Table"
+
+# Declarative class lifecycle (replaces the legacy `migrations` array; a Worker
+# may use one or the other, never both). `storage = "sqlite"` is mandatory for
+# namespaces created today.
+[exports.Table]
+type = "durable-object"
+storage = "sqlite"
+
+# Hourly janitor: prunes webhook de-dupe rows and reconciles ledger drift.
+[triggers]
+crons = ["23 * * * *"]
+
+[observability]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# Non-secret config. Secrets live in `.dev.vars` locally and `wrangler secret put`
+# in production — never in this file.
+# ---------------------------------------------------------------------------
+[vars]
+APP_ENV = "production"
+# Set after `wrangler deploy`, e.g. https://jackedbot.<subdomain>.workers.dev
+PUBLIC_ORIGIN = "https://jackedbot.codebam.workers.dev"
+TELEGRAM_BOT_USERNAME = "JackedBot"
+# Stars -> play money (1 Star = $10.00 of chips). One-way only: there is no
+# cashout path in this application and this constant is never used in reverse.
+STARS_BUY_IN_AMOUNT = "1"
+BUY_IN_LABEL = "JackedBot Play Money"
+BUY_IN_DESCRIPTION = "$10.00 of play-money chips. Not redeemable for cash, Stars or TON."
+MINI_APP_PATH = "/"
+AGE_MIN_YEARS = "18"
+INITDATA_MAX_AGE_SECONDS = "86400"
+WS_TICKET_TTL_SECONDS = "60"
+TABLE_HEARTBEAT_MS = "2000"
+DEFAULT_MIN_BET_CENTS = "100"
+DEFAULT_MAX_BET_CENTS = "50000"
+# One-time free play-money stack for brand-new accounts, in cents.
+# 2000 = $20.00 = exactly two Stars' worth of chips (~20 minimum bets).
+# Set to "0" to disable; new players would then have to buy Stars before sitting.
+WELCOME_GRANT_CENTS = "2000"
+HOUSE_WARNING = "Play money only. No cash value. 18+."

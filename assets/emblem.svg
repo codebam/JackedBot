@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="felt" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#17422a"/>
+      <stop offset="62%" stop-color="#0c1f17"/>
+      <stop offset="100%" stop-color="#061410"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe7ae"/>
+      <stop offset="52%" stop-color="#f2c66d"/>
+      <stop offset="100%" stop-color="#b98a2e"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#felt)"/>
+  <circle cx="256" cy="238" r="150" fill="#f2c66d" opacity="0.13" filter="url(#soft)"/>
+  <circle cx="256" cy="256" r="228" fill="none" stroke="url(#gold)" stroke-width="6" opacity="0.85"/>
+  <circle cx="256" cy="256" r="212" fill="none" stroke="#f2c66d" stroke-width="2" opacity="0.35" stroke-dasharray="2 10"/>
+  <g transform="translate(256 244) scale(0.78) translate(-256 -256)">
+    <path d="M256 96 C256 96 168 176 168 240 C168 284 200 306 228 306 C242 306 250 300 254 296 C252 322 240 344 218 360 L294 360 C272 344 260 322 258 296 C262 300 270 306 284 306 C312 306 344 284 344 240 C344 176 256 96 256 96 Z" fill="url(#gold)"/>
+  </g>
+  
+</svg>

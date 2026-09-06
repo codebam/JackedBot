@@ -1,0 +1,70 @@
+{
+  "model": "wan2.7-image",
+  "brand": {
+    "feltDeep": "#061410",
+    "felt": "#0c1f17",
+    "feltLit": "#17422a",
+    "gold": "#f2c66d",
+    "goldDeep": "#b98a2e",
+    "cream": "#f6efe0",
+    "red": "#e8564f"
+  },
+  "assets": {
+    "photo": {
+      "raw": "assets/raw/photo.png",
+      "generated": "1024x1024",
+      "derived": [
+        "assets/botfather/bot-profile-512.png (523KB)",
+        "assets/botfather/bot-profile-160.png (48KB)",
+        "public/apple-touch-icon.png (66KB)"
+      ]
+    },
+    "icon": {
+      "raw": "assets/raw/icon.png",
+      "generated": "1024x1024",
+      "derived": [
+        "assets/botfather/miniapp-icon-512.png (358KB)",
+        "public/icons/icon-192.png (53KB)"
+      ]
+    },
+    "banner": {
+      "raw": "assets/raw/banner.png",
+      "generated": "1440x720",
+      "derived": [
+        "assets/botfather/miniapp-main-screen-640x320.png (497KB)",
+        "assets/botfather/miniapp-main-screen-1280x640.png (1936KB)",
+        "public/og-image.png (1805KB)"
+      ]
+    },
+    "preview": {
+      "raw": "assets/raw/preview.png",
+      "generated": "720x1280",
+      "derived": [
+        "assets/botfather/media-preview-1080x1920.png (4066KB)"
+      ]
+    },
+    "felt": {
+      "raw": "assets/raw/felt.png",
+      "generated": "1024x1024",
+      "derived": [
+        "public/textures/felt-tile.png (651KB)"
+      ]
+    },
+    "chipset": {
+      "raw": "assets/raw/chipset.png",
+      "generated": "1024x1024",
+      "derived": [
+        "assets/botfather/chips-reference.png (1507KB)"
+      ]
+    },
+    "emblem": {
+      "derived": [
+        "assets/botfather/emblem-512.png",
+        "assets/botfather/miniapp-icon-100.png",
+        "assets/botfather/wordmark-640.png",
+        "public/favicon.png",
+        "public/icons/*"
+      ]
+    }
+  }
+}

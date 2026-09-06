@@ -1,0 +1,46 @@
+# =============================================================================
+# Test-only Worker config for `vitest --config vitest.workers.config.ts`.
+# Real bindings (D1 + the actual Table class) on workerd, with non-secret values
+# inlined as vars so tests are deterministic and never touch a real bot token.
+# The format check in TelegramBot/getConfig is satisfied by the fake below.
+# =============================================================================
+name = "jackedbot-test"
+main = "./tests/worker/test-worker.ts"
+compatibility_date = "2026-07-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jackedbot-test-db"
+database_id = "11111111-1111-1111-1111-111111111111"
+
+[[durable_objects.bindings]]
+name = "TABLE"
+class_name = "Table"
+
+[exports.Table]
+type = "durable-object"
+storage = "sqlite"
+
+[vars]
+APP_ENV = "test"
+PUBLIC_ORIGIN = "http://localhost:8788"
+TELEGRAM_BOT_USERNAME = "jackedbot_test"
+STARS_BUY_IN_AMOUNT = "1"
+BUY_IN_LABEL = "Test Buy-in"
+BUY_IN_DESCRIPTION = "Test only"
+MINI_APP_PATH = "/"
+AGE_MIN_YEARS = "18"
+INITDATA_MAX_AGE_SECONDS = "86400"
+WS_TICKET_TTL_SECONDS = "60"
+TABLE_HEARTBEAT_MS = 60000
+WELCOME_GRANT_CENTS = "2000"
+DEFAULT_MIN_BET_CENTS = "100"
+DEFAULT_MAX_BET_CENTS = "50000"
+HOUSE_WARNING = "Play money only. No cash value. 18+."
+
+# NOT secrets — test fixtures only. Never put real credentials in this file.
+TELEGRAM_BOT_TOKEN = "123456789:TESTaaaTELEGRAMBOTTESTaaa"
+APP_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef"
+TELEGRAM_WEBHOOK_SECRET = "test-webhook-secret-value-000000"
+ADMIN_USER_IDS = "900001"
