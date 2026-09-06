@@ -30,3 +30,15 @@ declare namespace Cloudflare {
 }
 
 interface Env extends Cloudflare.Env {}
+
+// `@astrojs/cloudflare` injects an `App.Locals` augmentation exposing the Cloudflare
+// ExecutionContext as `locals.cfContext`, but that file is only emitted during a
+// build (`.astro/cloudflare.d.ts`), so `tsc --noEmit` on a fresh checkout could not
+// see it. Declaring it here matches the adapter's own shape exactly — interface
+// merging makes the two declarations identical rather than conflicting.
+declare namespace App {
+  interface Locals {
+    /** Cloudflare ExecutionContext: use for waitUntil() and DO `exports`. */
+    cfContext: ExecutionContext;
+  }
+}

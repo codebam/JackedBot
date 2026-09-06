@@ -8,10 +8,12 @@ import { requireUser, AuthError } from '../../lib/auth.ts';
 import { authResponse, err, ok } from '../../lib/http.ts';
 import { acceptAgeGate, hasAcceptedAge } from '../../lib/db/users.ts';
 import { AGE_GATE_STATEMENT } from '../../lib/telegram/session.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function POST(request: Request): Promise<Response> {
+export async function POST(context: APIContext): Promise<Response> {
+  const { request } = context;
   let auth;
   try {
     // Tight freshness: this is a legal attestation, not a page view.

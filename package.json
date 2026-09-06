@@ -8,7 +8,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro build && astro preview",
-    "deploy": "astro build && wrangler deploy",
+    "deploy": "astro build && wrangler deploy && node scripts/smoke-live.mjs",
     "types": "wrangler types",
     "postinstall": "wrangler types || true",
     "db:create": "wrangler d1 create jackedbot-db",
@@ -30,7 +30,10 @@
     "check:sync": "node scripts/sync-migration.mjs --check && node scripts/gen-test-schema.mjs --check",
     "imports": "node scripts/check-imports.mjs src",
     "e2e:ws": "node scripts/e2e-ws.mjs",
-    "prepare:gen": "node scripts/sync-migration.mjs && node scripts/gen-test-schema.mjs"
+    "prepare:gen": "node scripts/sync-migration.mjs && node scripts/gen-test-schema.mjs",
+    "smoke": "node scripts/smoke-live.mjs",
+    "assets": "node scripts/gen-assets.mjs",
+    "assets:qc": "node scripts/qc-assets.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.0",

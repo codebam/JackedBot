@@ -14,10 +14,12 @@ import { mintSocketTicket } from '../../../../lib/table-client.ts';
 import { getTableConfig } from '../../../../lib/db/tablesRepo.ts';
 import { hasAcceptedAge } from '../../../../lib/db/users.ts';
 import { WS_PREFIX } from '../../../../shared/routes.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function POST(request: Request, { params }: { params: { id: string } }): Promise<Response> {
+export async function POST(context: APIContext<{ id: string }>): Promise<Response> {
+  const { request, params } = context;
   let auth;
   try {
     // Fresh initData only: this is the credential that opens a live game socket.

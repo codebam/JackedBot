@@ -9,10 +9,11 @@
 //   4. per-charge ledger idempotency inside `creditBuyIn()` — the real guarantee
 //      for money, because layers 1-3 are best-effort across isolates.
 import { env } from 'cloudflare:workers';
-import { TelegramBot, type Update } from '../../../lib/telegram/api.ts';
+import { TelegramApiError, TelegramBot, type Update } from '../../../lib/telegram/api.ts';
 import { alreadySeen, configFor, routeUpdate } from '../../../lib/telegram/webhook.ts';
 import { rateLimitOr429, SlidingWindowRateLimiter } from '../../../lib/ratelimit.ts';
 import { clientIp } from '../../../lib/auth.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
@@ -20,7 +21,8 @@ export const prerender = false;
 // updates, and dropping a payment update is far worse than allowing a spike.
 const perIp = new SlidingWindowRateLimiter(200, 10_000, 20_000);
 
-export async function POST(request: Request, context: { locals: { cfContext: ExecutionContext } }): Promise<Response> {
+export async function POST(context: APIContext): Promise<Response> {
+  const { request } = context;
   const cfg = configFor(env, request.url);
 
   const secret = request.headers.get('x-telegram-bot-api-secret-token');
@@ -50,15 +52,25 @@ export async function POST(request: Request, context: { locals: { cfContext: Exe
   const bot = new TelegramBot(cfg.botToken);
 
   try {
-    const result = await routeUpdate(update, { env, cfg, bot, ctx });
+    const result = await routeUpdate(update, { env: env as unknown as Env, cfg, bot, ctx });
     return Response.json({ ok: true, handled: result.handled });
   } catch (e) {
-    // 5xx makes Telegram retry the update, which is what we want for a transient
-    // D1 hiccup. Every handler is idempotent, so a retry is safe.
+    // A Telegram API rejection means the *delivery* failed, not our processing.
+    // Retrying cannot fix "user blocked the bot" or "chat not found", and a 5xx
+    // would make Telegram redeliver this update forever, so ACK those and move on.
+    if (e instanceof TelegramApiError && DEAD_CHAT.test(e.description)) {
+      console.warn(`dropped update ${update.update_id}: ${e.code} ${e.description}`);
+      return Response.json({ ok: true, handled: 'dropped_undeliverable' });
+    }
+    // Everything else (D1 blip, unexpected throw) is worth retrying, and every
+    // handler is idempotent, so a redelivery is safe.
     console.error('webhook handler failed', update.update_id, e);
     return new Response('error', { status: 500 });
   }
 }
+
+/** Bot API failures that will never succeed on retry. */
+const DEAD_CHAT = /chat not found|user was blocked|bot was kicked|USER_DEACTIVATED|BOT_BLOCKED|PEER_ID_INVALID|chat_id is empty|not enough rights/i;
 
 export async function GET(): Promise<Response> {
   return Response.json({

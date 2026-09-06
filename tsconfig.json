@@ -2,17 +2,22 @@
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["node", "vitest/globals"],
-
+    "types": [
+      "node",
+      "vitest/globals"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "preact",
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": false,
     "verbatimModuleSyntax": false,
-
     "noEmit": true,
     "strictNullChecks": true,
     "noUncheckedIndexedAccess": true,
@@ -21,15 +26,37 @@
     "useUnknownInCatchVariables": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@game/*": ["src/game/*"],
-      "@shared/*": ["src/shared/*"],
-      "@lib/*": ["src/lib/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@game/*": [
+        "src/game/*"
+      ],
+      "@shared/*": [
+        "src/shared/*"
+      ],
+      "@lib/*": [
+        "src/lib/*"
+      ]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.astro", "scripts/**/*.ts", "*.d.ts", "tests/**/*.ts", "vitest.config.ts", "astro.config.mjs"],
-  "exclude": ["dist", "node_modules", ".astro", ".wrangler"]
+  "include": [
+    ".astro/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.astro",
+    "scripts/**/*.ts",
+    "*.d.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "astro.config.mjs"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    ".astro",
+    ".wrangler"
+  ]
 }

@@ -7,15 +7,18 @@ import { env } from 'cloudflare:workers';
 import { AuthError, requireUser } from '../../../../lib/auth.ts';
 import { authResponse, err, ok, parseTableId } from '../../../../lib/http.ts';
 import { tableState } from '../../../../lib/table-client.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function GET(request: Request, { params }: { params: { id: string } }): Promise<Response> {
-  return state(request, params.id);
+export async function GET(context: APIContext<{ id: string }>): Promise<Response> {
+  const { request, params } = context;
+  return state(request, params?.id ?? '');
 }
 
-export async function POST(request: Request, { params }: { params: { id: string } }): Promise<Response> {
-  return state(request, params.id);
+export async function POST(context: APIContext<{ id: string }>): Promise<Response> {
+  const { request, params } = context;
+  return state(request, params?.id ?? '');
 }
 
 async function state(request: Request, rawId: string): Promise<Response> {

@@ -10,10 +10,12 @@ import { authResponse, err, ok } from '../../lib/http.ts';
 import { hasAcceptedAge, isAdmin } from '../../lib/db/users.ts';
 import { bootstrapUser, AGE_GATE_STATEMENT } from '../../lib/telegram/session.ts';
 import { formatCents } from '../../shared/money.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function POST(request: Request): Promise<Response> {
+export async function POST(context: APIContext): Promise<Response> {
+  const { request } = context;
   let auth;
   try {
     auth = await requireUser(request, env as unknown as Env);
@@ -57,7 +59,8 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 /** GET /api/session — cheap who-am-I, no bootstrap writes. */
-export async function GET(request: Request): Promise<Response> {
+export async function GET(context: APIContext): Promise<Response> {
+  const { request } = context;
   try {
     const auth = await requireUser(request, env as unknown as Env, { maxAgeSeconds: 3600 });
     if (!hasAcceptedAge(auth.user)) {

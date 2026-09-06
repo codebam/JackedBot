@@ -20,6 +20,7 @@ import { formatCents } from '../../shared/money.ts';
 import { rateLimitOr429, SlidingWindowRateLimiter } from '../../lib/ratelimit.ts';
 import { clientIp } from '../../lib/auth.ts';
 import { logAdminAction } from '../../lib/db/payments.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
@@ -28,7 +29,8 @@ const limiter = new SlidingWindowRateLimiter(6, 60_000, 10_000);
 
 const MAX_STARS_PER_INVOICE = 50;
 
-export async function POST(request: Request): Promise<Response> {
+export async function POST(context: APIContext): Promise<Response> {
+  const { request } = context;
   let auth;
   try {
     // Fresh credentials only: we are about to open a real-money payment sheet.

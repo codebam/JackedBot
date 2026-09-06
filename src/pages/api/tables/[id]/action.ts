@@ -9,6 +9,7 @@ import { authResponse, err, ok, parseTableId, readJson } from '../../../../lib/h
 import { tableCommand } from '../../../../lib/table-client.ts';
 import { rateLimitOr429, SlidingWindowRateLimiter } from '../../../../lib/ratelimit.ts';
 import type { ClientMessage } from '../../../../shared/protocol.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
@@ -18,7 +19,8 @@ const limiter = new SlidingWindowRateLimiter(20, 5_000, 4_000);
 
 const ALLOWED: ReadonlySet<ClientMessage['t']> = new Set(['sit', 'leave', 'wager', 'clear_wager', 'action', 'resume']);
 
-export async function POST(request: Request, { params }: { params: { id: string } }): Promise<Response> {
+export async function POST(context: APIContext<{ id: string }>): Promise<Response> {
+  const { request, params } = context;
   const tableId = parseTableId(params.id);
   if (!tableId) return err('BAD_TABLE_ID', 'Unknown table.', 400);
 

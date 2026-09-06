@@ -5,10 +5,12 @@ import { authResponse, err, ok, parseTableId } from '../../../../lib/http.ts';
 import { getTableConfig } from '../../../../lib/db/tablesRepo.ts';
 import { RULES } from '../../../../game/rules.ts';
 import { formatCents } from '../../../../shared/money.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function GET(request: Request, { params }: { params: { id: string } }): Promise<Response> {
+export async function GET(context: APIContext<{ id: string }>): Promise<Response> {
+  const { request, params } = context;
   let auth;
   try {
     auth = await requireUser(request, env as unknown as Env);

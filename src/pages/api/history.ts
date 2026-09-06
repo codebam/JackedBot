@@ -8,10 +8,12 @@ import { authResponse, ok } from '../../lib/http.ts';
 import { ledgerTail, paymentsForUser } from '../../lib/db/payments.ts';
 import { getPlayerSummary, recentHands } from '../../lib/db/tablesRepo.ts';
 import { formatCents } from '../../shared/money.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function GET(request: Request): Promise<Response> {
+export async function GET(context: APIContext): Promise<Response> {
+  const { request } = context;
   let auth;
   try {
     auth = await requireUser(request, env as unknown as Env);

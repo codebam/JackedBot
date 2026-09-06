@@ -7,10 +7,12 @@ import { AuthError, requireUser } from '../../../lib/auth.ts';
 import { authResponse, ok } from '../../../lib/http.ts';
 import { ensureDefaultTables, listLobbyTables } from '../../../lib/db/tablesRepo.ts';
 import { hasAcceptedAge } from '../../../lib/db/users.ts';
+import type { APIContext } from 'astro';
 
 export const prerender = false;
 
-export async function GET(request: Request): Promise<Response> {
+export async function GET(context: APIContext): Promise<Response> {
+  const { request } = context;
   let auth;
   try {
     auth = await requireUser(request, env as unknown as Env);
