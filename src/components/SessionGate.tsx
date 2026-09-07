@@ -57,8 +57,10 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
 
     // A deep link (t.me/<bot>?startapp=t_<id>) always lands on the Main Screen URL,
     // which is `/`. Route to the invited table first: authenticating the lobby we are
-    // about to leave is a wasted round trip, and 'h'/'same page' params return false
-    // so this cannot loop.
+    // about to leave is a wasted round trip. The param is launch-scoped and this gate
+    // hydrates on every page, so followTelegramStartParam spends each value once -
+    // otherwise a stale start_param bounces every later page (/new-table, the lobby)
+    // back to the launch route.
     if (followTelegramStartParam()) return;
 
     async function boot() {
