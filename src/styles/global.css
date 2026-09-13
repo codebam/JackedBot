@@ -461,14 +461,45 @@ code {
 }
 
 .gate__confirm input {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
+.gate__confirm input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Errors were styled but never announced; role="alert" is in the component. */
 .gate__error {
   color: var(--danger);
   font-size: 0.82rem;
+  margin: 0 0 10px;
+}
+
+/* The panel takes focus on open so a keyboard user starts inside the dialog rather
+   than at the top of the page behind it. It is a container, not a control, so it
+   gets no focus ring of its own. */
+.gate__card:focus {
+  outline: none;
+}
+
+/* Why "enter" is greyed out. Without this the only cue was a disabled button, which
+   on a legal gate reads as a page that failed to load. */
+.gate__why {
+  font-size: 0.78rem;
+  color: var(--amber);
+  margin: 0 0 10px;
+}
+
+/* Kept in the DOM (aria-describedby still points at it) but out of the way once the
+   box is ticked or an error has taken over the explanation. */
+.gate__why--done {
+  color: var(--ink-mute);
 }
 
 /* ----------------------------------------------------------------- wallet */
