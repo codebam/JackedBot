@@ -3,6 +3,29 @@
    Mobile-first, dark, high-contrast, thumb-reachable. Layout is a single column
    that widens into a two-pane table above 720px. Countdown rings, chip colours and
    card faces are all pure CSS: no image requests on the hot path.
+
+   CONTRAST CONTRACT — WCAG 2.2 AA, and every ratio below is measured against the
+   COMPOSITED surface, not the flat token. The felt is a gradient with an rgba wash
+   over it, so a colour's real background is the blend; measuring against --felt-0
+   flatters everything by 2-3 points and is how this file drifted. Worst case per
+   token, over the lightest surface it actually lands on:
+
+     --ink       9.58:1   --ink-dim  6.33:1   --ink-mute  4.52:1
+     --gold      5.66:1   --green    4.66:1   --amber     4.87:1
+     --red       4.56:1   --danger   4.55:1   --blue      4.52:1
+     --gold-deep 4.78:1 (on the darkest card-face stop, #efe9dc)
+
+   Known residual failures, all of them the SAME root cause and all in sections
+   with other owners: a badge that tints its own background with its own hue
+   (`background: #48d18a2b; color: var(--green)`) RAISES the background luminance
+   toward the text, so no token value can win. Darken the chip, not the ink:
+   dropping those tints from 2b to 0d alpha recovers ~1.2:1 on every one, and
+   .badge--lose (3.73:1), .badge--win (3.44:1) and .badge--split (3.66:1) all
+   clear AA on that change alone. .wallet__tag is the other case still under —
+   #ffffff12 over #ffffff0a over felt gives --ink-mute 3.85:1, and it is the
+   "play money" compliance badge at 0.62rem, the two worst numbers in the file.
+
+   Nothing in this file should render below --text-2xs (11px).
    ============================================================================= */
 
 :root {
@@ -10,18 +33,55 @@
   --felt-1: #0c1f17;
   --felt-2: #11301f;
   --felt-3: #17422a;
+  /* The "ceiling lamp" wash at the top of the page. Was an untokenised #1c5233 in
+     the body gradient, which lifted the page-top luminance to 0.0652 and on its
+     own dragged roughly forty text pairings under AA — --ink-mute measured 2.34:1
+     there. #17482f keeps the identical hue and still reads as light falling from
+     above (2.6x the luminance of --felt-1) at 0.0502, worth +15% on every ink
+     over it. Tokenised so prefers-contrast: more can flatten it. */
+  --felt-glow: #17482f;
   --line: #ffffff1a;
   --line-strong: #ffffff33;
+  /* Three-step ramp, ~13 points of HSL lightness apart (70 / 83 / 95) so the
+     hierarchy survives the lift. --ink-mute was #6f8b7d and measured 2.45:1
+     worst-case — and it is the most-used text colour in this file, ~20
+     declarations of small uppercase labels (SEATS, STAKES, BANKROLL, DEALER
+     STANDS ON ALL 17s, the connection state, the hand-history footnote).
+     --ink-dim was already AA on plain felt at 4.79:1 but moves up with it,
+     otherwise the two collapse into one step. */
   --ink: #eef7f1;
-  --ink-dim: #a9c2b4;
-  --ink-mute: #6f8b7d;
+  --ink-dim: #ccdbd2;
+  --ink-mute: #a9bbb2;
+  /* --gold, --green and --amber already cleared AA on every plain felt surface
+     (5.66 / 4.66 / 4.87 worst case) and are untouched — the palette's identity
+     lives in them. The four below did not.
+
+     --gold-deep #b98a2e is the ace's centre pip on a near-white card face:
+     3.06:1 on #fffdf7 and 2.58:1 on the darker #efe9dc stop. #7d6215 is 4.78:1
+     on the worst stop and is still a bronze, which is what an antique-gold ace
+     pip wants to be. It is also the .chip--mini edge, where a darker ring reads
+     better against the gold centre anyway.
+
+     --red #e8564f measured 2.85:1 on the settlement row and 2.33:1 on
+     .badge--lose. It is ONLY ever a text colour (the four uses are
+     .tbadge--closed, .badge--lose and .results__row--lose/--bust), so lifting the
+     value fixes all of them with no edit in their sections; it also feeds the
+     .phasebar__fill amber-to-red heat gradient, which still reads as heat.
+
+     --red and --danger were already near-duplicates (#e8564f vs #ff6b6b) and
+     both had to move, so both are now pale. They are documented as: --danger is
+     the loud alert red (errors, disconnects, busts), --red is the outcome red
+     (you lost this hand). Consolidating every TEXT use onto --danger and keeping
+     --red for fills and gradients is the recommended follow-up.
+
+     --blue #58a6ff measured 2.87:1 and has exactly one consumer, .badge--dd. */
   --gold: #f2c66d;
-  --gold-deep: #b98a2e;
-  --red: #e8564f;
+  --gold-deep: #7d6215;
+  --red: #f4938c;
   --green: #48d18a;
-  --blue: #58a6ff;
+  --blue: #a6d0ff;
   --amber: #f0b34a;
-  --danger: #ff6b6b;
+  --danger: #ff9d96;
 
   /* ------------------------------------------------------------- type scale */
   /* Nine named steps replacing the 18 ad-hoc rem values this file had drifted to
@@ -191,7 +251,7 @@ html {
 body {
   min-height: var(--app-h);
   background:
-    radial-gradient(120% 80% at 50% -10%, #1c5233 0%, transparent 60%),
+    radial-gradient(120% 80% at 50% -10%, var(--felt-glow) 0%, transparent 60%),
     repeating-linear-gradient(45deg, #ffffff05 0 2px, transparent 2px 6px),
     linear-gradient(180deg, var(--felt-1) 0%, var(--felt-0) 100%);
   background-attachment: fixed;
