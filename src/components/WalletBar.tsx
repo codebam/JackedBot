@@ -7,13 +7,15 @@
 // =============================================================================
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { api, ApiError, humanError } from '../lib/client/api.ts';
-import { haptic, openInvoice, showNotice, isInTelegram } from '../lib/client/telegram.ts';
+import { haptic, openInvoice, isInTelegram } from '../lib/client/telegram.ts';
 import { formatCents } from '../shared/money.ts';
 
 export interface WalletBarProps {
   initialBankrollCents: number;
   starsPerPurchase?: number;
   centsPerStar?: number;
+  /** Server's own one-line description of what a purchase delivers. */
+  purchaseNote?: string;
   /** Rebuy prompt appears whenever the balance bottoms out. */
   onBankroll?: (cents: number) => void;
   compact?: boolean;
@@ -25,15 +27,31 @@ interface Session {
   needsRebuy?: boolean;
 }
 
+/** POST /api/buyin's reply. `disclaimer` and `payload` are both meant to be shown. */
+interface Invoice {
+  link: string;
+  stars: number;
+  cents: number;
+  centsLabel: string;
+  payload: string;
+  disclaimer: string;
+}
+
 const POLL_MS = 1_200;
 const POLL_TIMEOUT_MS = 25_000;
 
-export function WalletBar({ initialBankrollCents, starsPerPurchase = 1, centsPerStar = 1000, onBankroll, compact = false }: WalletBarProps) {
+export function WalletBar({
+  initialBankrollCents,
+  starsPerPurchase = 1,
+  centsPerStar = 1000,
+  purchaseNote,
+  onBankroll,
+  compact = false,
+}: WalletBarProps) {
   const [bankroll, setBankroll] = useState(initialBankrollCents);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const mounted = useRef(true);
-  const expectedRef = useRef<number>(initialBankrollCents);
 
   useEffect(() => {
     mounted.current = true;
@@ -71,28 +89,38 @@ export function WalletBar({ initialBankrollCents, starsPerPurchase = 1, centsPer
     setNote(null);
     haptic('light');
     const before = bankroll;
-    expectedRef.current = before + stars * centsPerStar;
+    let inv: Invoice;
     try {
-      const inv = await api<{ link: string; stars: number; cents: number; centsLabel: string }>('/api/buyin', {
-        method: 'POST',
-        body: { stars },
-      });
+      inv = await api<Invoice>('/api/buyin', { method: 'POST', body: { stars } });
+    } catch (e) {
+      setNote(e instanceof ApiError && e.code === 'AGE_GATE_REQUIRED' ? 'Confirm you are 18+ before buying chips.' : humanError(e));
+      haptic('error');
+      if (mounted.current) setBusy(false);
+      return;
+    }
+
+    try {
       const status = await openInvoice(inv.link);
       if (status === 'paid') {
-        setNote(`Payment confirmed — waiting for your chips…`);
+        setNote(`Payment confirmed — waiting for your ${inv.centsLabel} of chips…`);
         const credited = await waitForCredit(before);
         if (credited === null) {
-          setNote(`Payment received. Your chips usually land within a minute — pull to refresh.`);
+          setNote(
+            `Payment received, but your chips have not landed yet. They usually appear within a minute — pull to refresh. Reference ${inv.payload}.`,
+          );
         }
       } else if (status === 'cancelled' || status === 'back') {
         setNote('Purchase cancelled. Nothing was charged.');
-        expectedRef.current = before;
       } else {
-        setNote(`Payment ${status}. If Stars left your account, support can trace it by charge id.`);
-        expectedRef.current = before;
+        // "Contact support" with no reference and no way to reach anyone was a dead
+        // end. The payload is what the ledger keys the payment on, so quoting it is
+        // what actually makes the charge traceable.
+        setNote(
+          `Payment ended as "${status}" and your chips were not added. If Stars left your account, message @JackedBot quoting ${inv.payload}.`,
+        );
       }
     } catch (e) {
-      setNote(e instanceof ApiError && e.code === 'AGE_GATE_REQUIRED' ? 'Confirm you are 18+ before buying chips.' : humanError(e));
+      setNote(humanError(e));
       haptic('error');
     } finally {
       if (mounted.current) setBusy(false);
@@ -118,6 +146,8 @@ export function WalletBar({ initialBankrollCents, starsPerPurchase = 1, centsPer
     if (initialBankrollCents !== undefined) setBankroll(initialBankrollCents);
   }, [initialBankrollCents]);
 
+  const broke = bankroll <= 0;
+
   return (
     <div class={compact ? 'wallet wallet--compact' : 'wallet'}>
       <div class="wallet__balance">
@@ -130,23 +160,31 @@ export function WalletBar({ initialBankrollCents, starsPerPurchase = 1, centsPer
 
       <div class="wallet__actions">
         <button class="btn btn--gold btn--sm" type="button" onClick={() => buy(starsPerPurchase)} disabled={busy}>
-          {busy ? 'Working…' : `1 ⭐ → ${formatCents(centsPerStar)}`}
+          {busy ? 'Working…' : `${starsPerPurchase} ⭐ → ${formatCents(starsPerPurchase * centsPerStar)}`}
         </button>
-        {bankroll <= 0 ? (
+        {broke ? (
           <button class="btn btn--ghost btn--sm" type="button" onClick={() => buy(5)} disabled={busy}>
             5 ⭐ → {formatCents(5 * centsPerStar)}
           </button>
         ) : null}
       </div>
 
+      {/* What a purchase delivers, stated before any payment sheet opens rather than
+          only inside it. This is the server's own wording (cfg.buyIn.description),
+          so the client is not authoring its own description of a real charge. */}
+      {purchaseNote ? <p class="wallet__terms">{purchaseNote}</p> : null}
+
       {note ? (
         <p class="wallet__note" role="status">
           {note}
         </p>
       ) : null}
-      {bankroll <= 0 ? (
-        <p class="wallet__rebuy">
-          You are out of chips. Stacks from several purchases add together — {formatCents(centsPerStar)} per Star.
+
+      {broke ? (
+        <p class="wallet__rebuy" role="status">
+          <b>You are out of chips.</b> That is the whole cost of a bad run — chips are play money, so no Stars, no cash and
+          nothing else was lost, and there is no debt. Buy a stack above to keep playing; stacks from separate purchases add
+          together.
         </p>
       ) : null}
     </div>
@@ -162,5 +200,3 @@ export function BalancePill({ cents, needsRebuy }: { cents: number; needsRebuy?:
     </span>
   );
 }
-
-void showNotice;

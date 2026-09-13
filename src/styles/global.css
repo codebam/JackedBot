@@ -554,6 +554,16 @@ code {
   flex-wrap: wrap;
 }
 
+/* What a purchase delivers, on screen before Telegram's sheet opens. Small and
+   quiet, but always present: this is the line that stops a Stars purchase reading
+   as a deposit you can get back. */
+.wallet__terms {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-mute);
+  margin: 0;
+}
+
 .wallet__note,
 .wallet__rebuy {
   font-size: 0.78rem;
@@ -563,6 +573,10 @@ code {
 
 .wallet__rebuy {
   color: var(--amber);
+}
+
+.wallet__rebuy b {
+  color: #ffd9a8;
 }
 
 .pill {

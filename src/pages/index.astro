@@ -83,6 +83,7 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
             initialBankrollCents={me.bankrollCents}
             starsPerPurchase={cfg.buyIn.stars}
             centsPerStar={cfg.centsPerStar}
+            purchaseNote={cfg.buyIn.description}
             compact
           />
         ) : null
