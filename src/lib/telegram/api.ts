@@ -388,6 +388,40 @@ function stripUndefined<T extends Record<string, unknown>>(o: T): T {
   return out as T;
 }
 
+/** Shared encoder + ellipsis for the byte-budget clip below. */
+const utf8 = new TextEncoder();
+const ELLIPSIS = '…';
+
+/**
+ * Trim a field to the byte budget Telegram enforces on it, on a code-point boundary.
+ *
+ * Two failure modes this exists to prevent, both of which take out the WHOLE
+ * request rather than the one bad field:
+ *   * Inline button text is capped at 64 *bytes* and a table name is capped at 48
+ *     *characters*, so a name plus its stakes overflows it routinely. Telegram
+ *     answers 400 and the player gets no reply at all.
+ *   * `String.slice` counts UTF-16 units, so cutting an emoji table name at the
+ *     budget can leave a lone surrogate behind. `JSON.stringify` then emits an
+ *     unpaired `\udXXX`, which is not valid text on the wire.
+ *
+ * Iterating with `for..of` walks code points, so a surrogate pair is kept whole or
+ * dropped whole.
+ */
+export function clipText(s: string | number | null | undefined, maxBytes: number): string {
+  const src = String(s ?? '');
+  if (utf8.encode(src).byteLength <= maxBytes) return src;
+  const budget = Math.max(0, maxBytes - utf8.encode(ELLIPSIS).byteLength);
+  let out = '';
+  let used = 0;
+  for (const ch of src) {
+    const w = utf8.encode(ch).byteLength;
+    if (used + w > budget) break;
+    out += ch;
+    used += w;
+  }
+  return `${out}${ELLIPSIS}`;
+}
+
 /** HTML-escape anything user-controlled before it reaches sendMessage. */
 export function esc(s: string | number | null | undefined): string {
   return String(s ?? '')

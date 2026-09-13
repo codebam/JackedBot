@@ -15,15 +15,21 @@
 //     mode the rejection would be invisible, showing as an empty picker.
 // =============================================================================
 import { formatCents } from '../../shared/money.ts';
-import { esc } from './api.ts';
-import type { InlineQuery, InlineQueryResult, TelegramBot } from './api.ts';
+import { clipText, esc } from './api.ts';
+import type { InlineKeyboardMarkup, InlineQuery, InlineQueryResult, TelegramBot } from './api.ts';
 import type { PrivateTableSummary } from '../db/privateTables.ts';
 import { listShareableTables } from '../db/privateTables.ts';
 import { miniAppLink, webAppUrl } from '../config.ts';
 import type { AppConfig } from '../config.ts';
 import type { WebhookOutcome } from './webhook.ts';
 
-/** Telegram caps a result title at 64 chars and a description at 512. */
+/**
+ * Telegram caps a result title at 64 and a description at 512. `clipText` counts
+ * bytes and cuts on a code-point boundary, where the old `String.slice` counted
+ * UTF-16 units: clipping an emoji table name at the cap left a lone surrogate
+ * behind, which JSON-encodes to an unpaired `\udXXX` — and one malformed field makes
+ * answerInlineQuery reject the whole batch, which the client shows as "No results".
+ */
 const TITLE_MAX = 64;
 const DESC_MAX = 512;
 
@@ -43,8 +49,6 @@ export interface InlineArgs {
   /** Link to offer when the player has nothing to share. Optional. */
   createUrl?: string;
 }
-
-const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1)}…`);
 
 function stakes(t: PrivateTableSummary): string {
   const seatFloor = t.minBetCents === t.buyInCents ? '' : ` · buy-in ${formatCents(t.buyInCents)}`;
@@ -119,13 +123,18 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
       // result id makes answerInlineQuery reject the WHOLE batch (RESULT_ID_INVALID),
       // which the client shows as a bare "No results" with no hint of the cause.
       id: `t-${t.id}`,
-      title: clip(`${t.name}${t.role === 'owner' ? ' · yours' : ''}`, TITLE_MAX),
-      description: clip(`${stakes(t)} · ${open} ${seatWord} open`, DESC_MAX),
+      title: clipText(`${t.name}${t.role === 'owner' ? ' · yours' : ''}`, TITLE_MAX),
+      // Framing first: the picker is read by people who have never opened the app,
+      // and a description is truncated far earlier than a posted message.
+      description: clipText(`Play money · 18+ · ${open} ${seatWord} open · ${stakes(t)}`, DESC_MAX),
       input_message_content: {
         message_text: [
           `🃏 <b>${esc(t.name)}</b>`,
           `Private blackjack table · ${esc(stakes(t))}`,
           open > 0 ? `${open} ${seatWord} open — tap Join to take one.` : 'Currently full. Tap to watch the felt.',
+          // The recipient is being invited by a friend, not by us: this line is the
+          // only place they are told what the chips are worth before they tap Join.
+          `Chips are <b>play money</b> — no cash value, no cashout. 18+ only.`,
         ].join('\n'),
         parse_mode: 'HTML',
         disable_web_page_preview: true,
@@ -138,24 +147,44 @@ export function buildInlineResults(args: InlineArgs): InlineQueryResult[] {
 
   if (results.length) return results;
 
-  // An empty result list renders as a blank picker with no explanation, which reads
-  // as "inline mode is broken" - the exact misdiagnosis worth avoiding here.
-  return [
+  return noMatchRow(args, link);
+}
+
+/**
+ * The single row that replaces an empty picker.
+ *
+ * An empty result list renders as a blank picker with no explanation, which reads as
+ * "inline mode is broken" - the exact misdiagnosis worth avoiding here. "Nothing
+ * matched what you typed" and "you have no tables" are different facts with
+ * different remedies, and telling a table owner they have no tables is worse than
+ * saying nothing.
+ */
+function noMatchRow(args: InlineArgs, link: (path: string) => string): InlineQueryResult[] {
+  const article = (title: string, description: string, messageText: string, markup?: InlineKeyboardMarkup): InlineQueryResult[] => [
     {
       type: 'article',
       id: 'help-none',
-      title: args.createUrl ? 'Create a private table first' : 'No private tables to share',
-      description: args.createUrl
-        ? 'Open the app and create a table, then come back here to post its Join button.'
-        : 'Use /newtable in DMs to create a private table, then mention @JackedBot here.',
-      input_message_content: {
-        message_text: '🃏 No private table to share yet — use /newtable to open one.',
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-      },
-      ...(args.createUrl
-        ? { reply_markup: { inline_keyboard: [[{ text: 'Open JackedBot to create one', url: link('/') }]] } }
-        : {}),
+      title,
+      description: clipText(description, DESC_MAX),
+      input_message_content: { message_text: messageText, parse_mode: 'HTML', disable_web_page_preview: true },
+      ...(markup ? { reply_markup: markup } : {}),
     },
   ];
+
+  if (args.tables.length) {
+    return article('No table matches that', `Clear the text after @JackedBot to see your ${args.tables.length} private ${args.tables.length === 1 ? 'table' : 'tables'}.`, '🃏 No private table matches that search.');
+  }
+
+  // `startapp` has no scheme for /new-table (src/shared/deeplink.ts routes only
+  // `t_<table id>` and `h`), so this button opens the app home, where New table
+  // lives. The label says "open", not "go to the create screen", because that is
+  // what it does - and a web_app button is not legal on an inline result at all.
+  return article(
+    args.createUrl ? 'Create a private table first' : 'No private tables to share',
+    args.createUrl
+      ? 'Open JackedBot, tap New table, then come back here to post its Join button.'
+      : 'Send /newtable to @JackedBot in DMs to create a private table, then mention it here.',
+    '🃏 No private table to share yet — send /newtable to the bot in DMs to open one.',
+    args.createUrl ? { inline_keyboard: [[{ text: 'Open JackedBot to create one', url: link('/') }]] } : undefined,
+  );
 }
