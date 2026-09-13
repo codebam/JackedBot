@@ -111,19 +111,6 @@ code {
   font-size: 0.82rem;
 }
 
-.lobby__welcome {
-  background: linear-gradient(90deg, #f2c66d22, #f2c66d0a);
-  border: 1px solid #f2c66d44;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 0.88rem;
-  margin: 0 0 14px;
-}
-
-.lobby__welcome b {
-  color: var(--gold);
-}
-
 .lobby__h2 {
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -536,6 +523,10 @@ code {
   font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
   color: var(--gold);
+  /* Reserves room for a real figure. The balance is fetched, so it paints as an em
+     dash first; without this the header reflows sideways when the number lands. */
+  min-width: 5.5ch;
+  display: inline-block;
 }
 
 .wallet__tag {
@@ -564,9 +555,10 @@ code {
   margin: 0;
 }
 
-/* The free-credit announcement. Same gold treatment .lobby__welcome had, kept here
-   because WalletBar now owns it: the grant is reported by the /api/session reply,
-   which only the client ever sees. */
+/* The free-credit announcement. WalletBar owns it rather than the page, because the
+   grant is reported by the /api/session reply and only the client ever sees that.
+   Replaces the .lobby__welcome banner the lobby used to render from SSR identity,
+   which is to say from nothing. */
 .wallet__grant {
   background: linear-gradient(90deg, #f2c66d22, #f2c66d0a);
   border: 1px solid #f2c66d44;
