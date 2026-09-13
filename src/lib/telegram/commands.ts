@@ -285,12 +285,27 @@ export async function cmdTables(c: CommandContext): Promise<void> {
   await bootstrapUser(c.env, c.cfg, c.user);
   const tables = await listLobbyTables(c.env.DB);
   if (!tables.length) {
-    await c.bot.sendMessage(c.message.chat.id, `No tables are open right now. Try /start in a moment.`);
+    // "Try /start in a moment" pointed at a command that does not open a table. The
+    // action that actually unblocks the player is creating one.
+    await c.bot.sendMessage(
+      c.message.chat.id,
+      `No public tables are open right now.\n\nYou can open your own — pick the stakes and the seats, and only the people you invite can see it.`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [button('🔒 Create a private table', { web_app: { url: webAppUrl(c.cfg, '/new-table') } })],
+            [lobbyButton(c.cfg)],
+          ],
+        },
+      },
+    );
     return;
   }
   const rows = tables.map((t) => {
     const stakes = `${formatCents(t.minBetCents)}–${formatCents(t.maxBetCents)}`;
-    return { text: `${t.name} · ${t.activeSeats}/${t.seatCount} seats · ${stakes}`, web_app: { url: webAppUrl(c.cfg, `/table/${t.id}`) } };
+    // Seats first: it is the part that tells you whether tapping gets you in, and it
+    // survives the 64-byte button-text budget that a long table name can blow.
+    return button(`${t.activeSeats}/${t.seatCount} seated · ${t.name} · ${stakes}`, { web_app: { url: webAppUrl(c.cfg, `/table/${t.id}`) } });
   });
   await c.bot.sendMessage(c.message.chat.id, `<b>Open tables</b>\nPlay money only — ${esc(formatCents(c.cfg.rules.starsToCentsPerStar))} per Star.`, {
     reply_markup: { inline_keyboard: rows.map((r) => [r]) },
@@ -409,13 +424,11 @@ await safeAnswer(c.bot, c.query.id, 'Confirmed — welcome aboard.');
     return;
   }
 
-  if (data === 'buyin') {
-    await safeAnswer(c.bot, c.query.id);
-    await cmdBuy({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message!, user });
-    return;
-  }
-
-  await c.bot.answerCallbackQuery(c.query.id, 'Unknown button.');
+  // Same trap the `age:accept` branch documents: a re-tapped old card carries a query
+  // id Telegram has already forgotten, so answering it raises QUERY_ID_INVALID. This
+  // was the one path still calling answerCallbackQuery bare, which 500'd the webhook
+  // and had Telegram redeliver the dead button forever.
+  await safeAnswer(c.bot, c.query.id, 'That button has expired — send /start for a fresh one.');
 }
 
 /** answerCallbackQuery is fire-and-forget by nature: swallow its failures. */
