@@ -940,7 +940,7 @@ code {
   margin: 0;
 }
 
-/* 44px, not the 36px .btn--sm default: these are the real-money controls, and a
+/* 44px, not the 40px .btn--sm default: these are the real-money controls, and a
    mistap on a purchase is the most expensive mistap in the app. Scoped here rather
    than in the shared buttons block, which other surfaces own. */
 .wallet__actions .btn--sm {
@@ -1725,8 +1725,8 @@ code {
   gap: 7px;
 }
 
-/* .btn--sm is 36px tall; Undo/Clear/Max/Bet are the most-tapped controls on the
-   felt and 36px misses thumbs. Scoped here so the shared button stays untouched. */
+/* .btn--sm is 40px tall; Undo/Clear/Max/Bet are the most-tapped controls on the
+   felt and 40px still misses thumbs. Scoped here so the shared button stays untouched. */
 .tray__btn {
   min-height: var(--tap);
   padding: 0 12px;
@@ -2296,10 +2296,14 @@ code {
   border-color: var(--danger);
 }
 
+/* Deliberately has no `outline: none`: the global :focus-visible ring is (0,1,0)
+   and this rule is (0,2,1), so cancelling the outline here would silently leave
+   text inputs as the only control in the app with no focus indicator at all
+   (WCAG 2.4.7/2.4.11 — a hairline changing colour is not a focus cue). The border
+   brightening is a bonus layered on top of the ring, not a replacement for it. */
 .form__field input:focus-visible,
 .form__field select:focus-visible {
   border-color: var(--gold, #d8b45a);
-  outline: none;
 }
 
 /* Action row on a table card. `margin-top: auto` used to sit on .tcard__cta, which
@@ -2344,7 +2348,7 @@ code {
 }
 
 /* Same reasoning as the wallet: Close is destructive and the stake presets set four
-   money fields at once, so neither belongs below the 44px target. */
+   money fields at once, so neither belongs at the 40px --tap-sm default. */
 .tcard__actions .btn--sm,
 .form__row .btn--sm {
   min-height: var(--tap);
