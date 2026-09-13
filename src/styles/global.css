@@ -3,6 +3,29 @@
    Mobile-first, dark, high-contrast, thumb-reachable. Layout is a single column
    that widens into a two-pane table above 720px. Countdown rings, chip colours and
    card faces are all pure CSS: no image requests on the hot path.
+
+   CONTRAST CONTRACT — WCAG 2.2 AA, and every ratio below is measured against the
+   COMPOSITED surface, not the flat token. The felt is a gradient with an rgba wash
+   over it, so a colour's real background is the blend; measuring against --felt-0
+   flatters everything by 2-3 points and is how this file drifted. Worst case per
+   token, over the lightest surface it actually lands on:
+
+     --ink       9.58:1   --ink-dim  6.33:1   --ink-mute  4.52:1
+     --gold      5.66:1   --green    4.66:1   --amber     4.87:1
+     --red       4.56:1   --danger   4.55:1   --blue      4.52:1
+     --gold-deep 4.78:1 (on the darkest card-face stop, #efe9dc)
+
+   Known residual failures, all of them the SAME root cause and all in sections
+   with other owners: a badge that tints its own background with its own hue
+   (`background: #48d18a2b; color: var(--green)`) RAISES the background luminance
+   toward the text, so no token value can win. Darken the chip, not the ink:
+   dropping those tints from 2b to 0d alpha recovers ~1.2:1 on every one, and
+   .badge--lose (3.73:1), .badge--win (3.44:1) and .badge--split (3.66:1) all
+   clear AA on that change alone. .wallet__tag is the other case still under —
+   #ffffff12 over #ffffff0a over felt gives --ink-mute 3.85:1, and it is the
+   "play money" compliance badge at 0.62rem, the two worst numbers in the file.
+
+   Nothing in this file should render below --text-2xs (11px).
    ============================================================================= */
 
 :root {
@@ -10,27 +33,187 @@
   --felt-1: #0c1f17;
   --felt-2: #11301f;
   --felt-3: #17422a;
+  /* The "ceiling lamp" wash at the top of the page. Was an untokenised #1c5233 in
+     the body gradient, which lifted the page-top luminance to 0.0652 and on its
+     own dragged roughly forty text pairings under AA — --ink-mute measured 2.34:1
+     there. #17482f keeps the identical hue and still reads as light falling from
+     above (2.6x the luminance of --felt-1) at 0.0502, worth +15% on every ink
+     over it. Tokenised so prefers-contrast: more can flatten it. */
+  --felt-glow: #17482f;
   --line: #ffffff1a;
   --line-strong: #ffffff33;
+  /* Three-step ramp, ~13 points of HSL lightness apart (70 / 83 / 95) so the
+     hierarchy survives the lift. --ink-mute was #6f8b7d and measured 2.45:1
+     worst-case — and it is the most-used text colour in this file, ~20
+     declarations of small uppercase labels (SEATS, STAKES, BANKROLL, DEALER
+     STANDS ON ALL 17s, the connection state, the hand-history footnote).
+     --ink-dim was already AA on plain felt at 4.79:1 but moves up with it,
+     otherwise the two collapse into one step. */
   --ink: #eef7f1;
-  --ink-dim: #a9c2b4;
-  --ink-mute: #6f8b7d;
+  --ink-dim: #ccdbd2;
+  --ink-mute: #a9bbb2;
+  /* --gold, --green and --amber already cleared AA on every plain felt surface
+     (5.66 / 4.66 / 4.87 worst case) and are untouched — the palette's identity
+     lives in them. The four below did not.
+
+     --gold-deep #b98a2e is the ace's centre pip on a near-white card face:
+     3.06:1 on #fffdf7 and 2.58:1 on the darker #efe9dc stop. #7d6215 is 4.78:1
+     on the worst stop and is still a bronze, which is what an antique-gold ace
+     pip wants to be. It is also the .chip--mini edge, where a darker ring reads
+     better against the gold centre anyway.
+
+     --red #e8564f measured 2.85:1 on the settlement row and 2.33:1 on
+     .badge--lose. It is ONLY ever a text colour (the four uses are
+     .tbadge--closed, .badge--lose and .results__row--lose/--bust), so lifting the
+     value fixes all of them with no edit in their sections; it also feeds the
+     .phasebar__fill amber-to-red heat gradient, which still reads as heat.
+
+     --red and --danger were already near-duplicates (#e8564f vs #ff6b6b) and
+     both had to move, so both are now pale. They are documented as: --danger is
+     the loud alert red (errors, disconnects, busts), --red is the outcome red
+     (you lost this hand). Consolidating every TEXT use onto --danger and keeping
+     --red for fills and gradients is the recommended follow-up.
+
+     --blue #58a6ff measured 2.87:1 and has exactly one consumer, .badge--dd. */
   --gold: #f2c66d;
-  --gold-deep: #b98a2e;
-  --red: #e8564f;
+  --gold-deep: #7d6215;
+  --red: #f4938c;
   --green: #48d18a;
-  --blue: #58a6ff;
+  --blue: #a6d0ff;
   --amber: #f0b34a;
-  --danger: #ff6b6b;
+  --danger: #ff9d96;
+
+  /* ------------------------------------------------------------- type scale */
+  /* Nine named steps replacing the 18 ad-hoc rem values this file had drifted to
+     (0.58, 0.6, 0.62, 0.64, 0.66, 0.68, 0.72, 0.74, 0.78, 0.82, 0.86, 0.88, 0.9,
+     0.95, 1.02, 1.12, 1.15, 1.3, 1.35, 1.65). They are declared, not applied:
+     rewriting the declarations belongs to whoever owns the section, and the
+     mapping for each one is in the report that accompanies this branch.
+
+     --text-2xs is a hard floor. The smallest text in the app was .badge at
+     0.58rem = 9.28px and .wallet__tag at 0.62rem = 9.92px. 9px uppercase on a
+     phone held at arm's length outdoors is not legible, and .wallet__tag is the
+     "play money" compliance badge — the one string in the product that has to be
+     readable. 11px is the floor Apple and Material both quote for a reason. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-md: 0.875rem; /* 14px */
+  --text-base: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.3125rem; /* 21px */
+  --text-2xl: 1.625rem; /* 26px */
+  --text-3xl: 1.875rem; /* 30px */
+
+  /* The uppercase micro-labels (SEATS, STAKES, BANKROLL, DEALER STANDS ON ALL
+     17s) are the hardest text in this UI to read, and it is the tracking as much
+     as the size. All-caps removes the word shape that fast reading depends on and
+     letter-spacing widens the gaps that would have carried it; at 0.64rem with
+     0.12em the two effects compound. 12px / 0.06em / 600 keeps the engraved-
+     plaque look the felt wants and stays readable. Weight does more work than
+     size here: a semibold 12px label out-reads a regular 13px one. */
+  --label-size: var(--text-xs);
+  --label-track: 0.06em;
+  --label-weight: 600;
+
+  /* ------------------------------------------------------------ space scale */
+  /* 4px base. The values already in the file cluster on it (4, 5, 6, 7, 8, 9, 10,
+     12, 14, 18, 20, 24) with a handful of off-grid stragglers; these eight cover
+     every gap and padding the design actually uses. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* ------------------------------------------------------------- geometry */
+  /* --radius-lg and --radius-pill name the two values already hardcoded across
+     the file: 18px on .gate__card / .overlay__card, and 999px on every badge,
+     pill, chip count and progress track. */
   --radius: 14px;
   --radius-sm: 9px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
   --shadow: 0 10px 30px #00000059;
   --shadow-soft: 0 4px 14px #0000003d;
+
+  /* ---------------------------------------------------------- touch targets */
+  /* --tap is 44px: the iOS HIG number and WCAG 2.5.5 (AAA). --tap-sm is the
+     compact variant and it is 40px, not the 36px .btn--sm used to hardcode.
+     36px does clear WCAG 2.5.8 (AA, 24px minimum), so this is not a conformance
+     fix — it is a mis-tap fix. The compact size is used almost entirely on the
+     betting row (Undo / Clear / Bet, 7px apart, inside a 15-second turn clock)
+     and on the wallet's buy buttons, where a mis-tap costs chips or fires a real
+     Stars invoice. 40px keeps the variant visibly smaller than --tap while
+     putting 20% more of a thumbprint on target. */
   --tap: 44px;
+  --tap-sm: 40px;
+
+  /* ------------------------------------------------------- viewport & safe */
+  /* 100vh is the LARGE viewport on mobile: it includes the area behind the
+     browser chrome, so a body sized to it runs past the visible window and the
+     --safe-bottom padding lands off-screen. dvh tracks the viewport that is
+     actually visible; the 100vh line above it is the fallback for engines that
+     predate dvh and is what a pre-JS paint gets. setViewportVars() in
+     src/lib/client/telegram.ts overwrites --app-h with an exact px value from
+     WebApp.viewportHeight once the island hydrates, so this is only the
+     first-paint floor — but on / and /new-table nothing calls it at all, so here
+     it is the whole story. */
   --app-h: 100vh;
+  --app-h: 100dvh;
+
+  /* env() is the CSS-only path and it is the one that actually fires on the lobby
+     and the create-table page: setViewportVars() is called only from GameTable, so
+     / and /new-table never received Telegram's insets and rendered under the
+     notch and over the home indicator. viewport-fit=cover is already in the
+     shell, which is what makes these non-zero. Each is declared twice so an
+     engine without env() keeps 0px instead of invalidating every calc() that
+     reads it; Telegram's own values still win once an island hydrates on the
+     table page, and they are more accurate inside the webview. */
   --safe-top: 0px;
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: 0px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: 0px;
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: 0px;
+  --safe-right: env(safe-area-inset-right, 0px);
+
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* ------------------------------------------------------------ button skin */
+  /* A button's edge is "visual information required to identify a user interface
+     component" under WCAG 1.4.11, so it needs 3:1 against the surface beside it.
+     .btn inherited --line-strong (#ffffff33), which measures 1.79:1 over the felt
+     — and .btn--ghost is transparent, so for a ghost button that border was the
+     ONLY thing separating a control from the background. --btn-border is 3.31:1
+     over the lightest surface a button sits on. Decorative card rules keep
+     --line / --line-strong; a card boundary is not a component boundary. */
+  --btn-bg: #ffffff14;
+  --btn-border: #ffffff6e;
+  /* Disabled is a dark recessed well rather than a faded copy of the enabled
+     button. See .btn:disabled below for why the old `opacity: 0.42` had to go. */
+  --btn-bg-disabled: #0000004d;
+  --btn-border-disabled: #ffffff26;
+
+  /* ------------------------------------------------------------- focus ring */
+  /* Two-tone, so ONE ring works on the dark felt and on the bright gold/green
+     button fills. No single colour can do both: 3:1 against the felt needs
+     relative luminance >= 0.25, 3:1 against the #f4d089 gold fill needs
+     <= 0.19, and those ranges do not intersect. So the pale-gold outline carries
+     the ring (8.7:1 on the felt) and a 2px felt-0 band (12.8:1 on the gold fill,
+     7.0:1 on the green) sits between it and the component, separating the two if
+     a ring ever lands on a bright surface. Total footprint 5px: every
+     overflow:hidden / overflow:auto ancestor in this file (.tcard, .gate__card,
+     .feed) keeps >= 14px of padding between its edge and any focusable child, so
+     the ring is never clipped. */
+  --focus-ring: #ffe9a8;
+  --focus-ring-inset: #061410;
+  --focus-ring-w: 3px;
+  --focus-ring-gap: 2px;
 }
 
 * {
@@ -50,10 +233,25 @@ body {
   overscroll-behavior-y: none;
 }
 
+/* iOS paints a translucent grey flash over any tapped element; on dark felt it
+   reads as a dirty smudge over the gradient. Tint it with the brand gold. */
+html {
+  -webkit-tap-highlight-color: #f2c66d33;
+}
+
+/* Pins the UA canvas, form controls, scrollbars and pickers to dark regardless of
+   the host theme — see the theme note in src/layouts/Base.astro: this app
+   deliberately does not follow tgWebAppTheme. Keyed on the data-theme attribute
+   so that attribute is load-bearing instead of dead, and repeated in CSS as well
+   as in the <meta> so it survives a shell that drops the meta. */
+[data-theme="felt"] {
+  color-scheme: dark;
+}
+
 body {
   min-height: var(--app-h);
   background:
-    radial-gradient(120% 80% at 50% -10%, #1c5233 0%, transparent 60%),
+    radial-gradient(120% 80% at 50% -10%, var(--felt-glow) 0%, transparent 60%),
     repeating-linear-gradient(45deg, #ffffff05 0 2px, transparent 2px 6px),
     linear-gradient(180deg, var(--felt-1) 0%, var(--felt-0) 100%);
   background-attachment: fixed;
@@ -79,12 +277,96 @@ code {
   border-radius: 5px;
 }
 
+/* --------------------------------------------------------------------- a11y */
+/* Screen-reader-only text. Half of the felt is a bare number with no label —
+   the header balance, the dealer total, a hand total — so owners need somewhere
+   to put the words a sighted player gets from layout. clip-path rather than
+   clip so it also works where the deprecated `clip` is gone. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The wallet, the session notice and the age gate all sit above the content a
+   player actually came for. Hidden with opacity (not display:none or
+   visibility:hidden, which would take it out of the tab order and out of the
+   accessibility tree) and revealed on focus. No motion, so reduced-motion users
+   get the same instant reveal. */
+.skip-link {
+  position: fixed;
+  top: calc(var(--space-2) + var(--safe-top));
+  left: var(--space-2);
+  z-index: 100;
+  padding: 10px var(--space-4);
+  background: var(--felt-0);
+  border: 1px solid var(--focus-ring);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skip-link:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The skip target takes focus so the reading order moves, but a 5px ring around
+   the whole page would be noise: the content is already on screen. */
+#jb-main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Shown by the <noscript> block in Base.astro. Without scripting the islands
+   never hydrate, so the honest answer is a plain notice rather than a felt that
+   looks live and is not. */
+.noscript-note {
+  background: #ffffff0a;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  padding: var(--space-3);
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
+}
+
+/* -------------------------------------------------------------------- focus */
+/* Every focusable element, not just text inputs. Keyboard and switch-access
+   players previously lost track of position on buttons, on the .tcard__cta join
+   links and on <summary>, because .form__field was the only rule in the file
+   that defined :focus-visible. Specificity is deliberately (0,1,0) so a
+   component can still opt into its own ring, and the box-shadow is the felt-0
+   half of the two-tone ring described above. */
+:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-gap);
+  box-shadow: 0 0 0 var(--focus-ring-gap) var(--focus-ring-inset);
+}
+
 /* ------------------------------------------------------------------ layout */
 .page,
 .lobby {
   max-width: 940px;
   margin: 0 auto;
-  padding: calc(14px + var(--safe-top)) 14px calc(24px + var(--safe-bottom));
+  /* On the 4px grid now (--space-4 / --space-6, was a bare 14px / 24px), and the
+     horizontal insets are added as well as the vertical ones: viewport-fit=cover
+     exposes all four, and in landscape a notch or a rounded corner would otherwise
+     eat the gutter on one side. Both ends were already wired to --safe-top /
+     --safe-bottom, but only GameTable ever set them — the env() fallbacks in
+     :root are what make the lobby and /new-table respect them too. */
+  padding: calc(var(--space-4) + var(--safe-top)) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-6) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
 }
 
 /* ------------------------------------------------------------------- lobby */
@@ -298,11 +580,24 @@ code {
   color: #ffe9bd;
 }
 
+/* Neutral variant, and the reason it exists: `.alert` is red text on a red tint,
+   and SessionGate.tsx:189-190 renders it for "Restoring your Telegram session…"
+   and "Signing you in…". Those are in-progress notices wearing an error colour,
+   so the colour contradicts the copy — a first-time player is told something has
+   gone wrong while the app is working normally (WCAG 1.4.1, colour carrying a
+   meaning the text does not have). #dbe8e0 on the #ffffff0a wash measures 7.4:1
+   over the felt-top and 11.6:1 over the mid felt. */
+.alert--pending {
+  background: #ffffff0a;
+  border-color: var(--btn-border);
+  color: #dbe8e0;
+}
+
 /* ----------------------------------------------------------------- buttons */
 .btn {
   appearance: none;
-  border: 1px solid var(--line-strong);
-  background: #ffffff10;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
   color: var(--ink);
   border-radius: var(--radius-sm);
   padding: 0 14px;
@@ -315,24 +610,66 @@ code {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  /* `manipulation`, not the default `auto`: it removes the 300ms double-tap-to-
+     zoom delay on buttons, which is the only thing the viewport meta's
+     `maximum-scale=1` was ever buying. With this in place pinch-zoom can stay
+     available to a low-vision player (WCAG 1.4.4). */
+  touch-action: manipulation;
   transition: transform 0.08s ease, filter 0.15s ease, background 0.15s ease;
+}
+
+/* Pressed feedback. `transform: scale(0.975)` on its own is a 1px move on a 44px
+   button — under a thumb, on a phone held in sunlight, it reads as nothing, and
+   the bright --primary / --gold fills hide it completely. brightness() gives
+   every variant a visible step, up on hover (there is no hover in Telegram's
+   webview, but this file is also served to a plain browser) and down on press. */
+.btn:hover:not(:disabled) {
+  filter: brightness(1.07);
 }
 
 .btn:active:not(:disabled) {
   transform: scale(0.975);
+  filter: brightness(0.94);
 }
 
+/* Disabled. This was `opacity: 0.42`, which dims the label and the fill by the
+   SAME factor, so the two converge instead of separating: measured label-vs-fill
+   1.05:1 on a default .btn, 2.21:1 on .btn--primary and 3.13:1 on .btn--gold,
+   with the label against the page dropping to 3.06:1. WCAG 1.4.3 and 1.4.11 both
+   exempt inactive components, so none of that was technically a failure — but the
+   result was that a player could not read "Sit down" or "Bet $25" to learn what
+   they cannot do yet, and the reason is exactly the thing worth reading.
+
+   Dimming the FILL only, and holding the label at --ink-mute, keeps "greyed out"
+   obvious and puts the text at 6.96:1. The well is dark rather than faded, so a
+   disabled button reads as recessed into the felt instead of as a broken enabled
+   one. This rule sits after the variants on purpose: (0,2,0) beats (0,1,0), so
+   one declaration also retires the bright gradient on a disabled primary or gold
+   button, which the old opacity-only rule could not do. */
 .btn:disabled {
-  opacity: 0.42;
+  background: var(--btn-bg-disabled);
+  border-color: var(--btn-border-disabled);
+  color: var(--ink-mute);
+  box-shadow: none;
+  filter: none;
+  transform: none;
   cursor: not-allowed;
 }
 
+/* The green was #2fa06a -> #1d7d4f with a #04150c label: 5.69:1 on the light
+   stop but only 3.67:1 on the dark one, so the bottom half of every primary
+   button — "Join table", "Sit down", "Bet", "Continue" — was under AA. Lifting
+   both stops keeps the same hue and the same top-to-bottom shading and puts the
+   label at 6.98:1 / 5.10:1. The #3fbd83 border is unchanged: it measures 4.40:1
+   against the felt-top, which is what identifies the component. */
 .btn--primary {
-  background: linear-gradient(180deg, #2fa06a, #1d7d4f);
+  background: linear-gradient(180deg, #37b277, #2a9762);
   border-color: #3fbd83;
   color: #04150c;
 }
 
+/* Unchanged and verified: #2b1d02 on the #f4d089 -> #cf9f3d gradient measures
+   11.12:1 / 6.78:1, and the #f7dfa6 border 6.97:1 against the felt. */
 .btn--gold {
   background: linear-gradient(180deg, #f4d089, #cf9f3d);
   border-color: #f7dfa6;
@@ -348,11 +685,45 @@ code {
 }
 
 .btn--sm {
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: var(--tap-sm);
+  padding: 0 12px;
   font-size: 0.8rem;
 }
 
+/* Shared busy state. There was none: AgeGate, WalletBar, CreateTableForm and
+   PrivateTables each hand-roll it by swapping their label for "Saving…",
+   "Working…", "Creating…" or "Closing…", so the four spellings drift and the
+   button looks live while it is not. Owners set aria-busy={busy} (they already
+   hold that state) and get the spinner, the progress cursor and re-entry
+   protection for free — and can then drop the label swap, because a spinner plus
+   the real label ("Create private table") beats a spinner plus "Creating…".
+
+   The ring is a border, so it costs no image request and no extra element. It is
+   named separately from the table section's `spin` keyframe so this section stays
+   self-contained across the three-way merge. Under prefers-reduced-motion the
+   block above caps its iteration count and it settles as a static three-quarter
+   ring, which still reads as "working" — keep a text label beside it. */
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn[aria-busy="true"]::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.7;
+  animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* --------------------------------------------------------------- age gate */
 .gate {
   position: fixed;
@@ -1730,15 +2101,111 @@ code {
   }
 }
 
+/* Reduced motion has to be genuinely safe, not merely fast. Zeroing the two
+   durations left three real breakages:
+
+   1. Card.tsx sets `animationDelay: index * 90ms` inline, and `.card` runs
+      `animation: deal … both` whose only keyframe is `from { opacity: 0 }`. With
+      the duration near zero but the delay intact, fill-mode:both held that
+      invisible start state for the whole stagger — a seven-card layout dealt
+      nothing at all for ~630ms and then popped every card in at once. Zeroing
+      the delay is what actually fixes it.
+   2. `.loader` is `spin 0.85s linear infinite`. An infinite animation at
+      0.001ms per iteration is a busy loop, not a still spinner; capping the
+      iteration count leaves the ring static and lets the compositor idle.
+   3. `.phasebar__fill` transitions `width` and the buttons transition
+      `transform`, so a state change landing mid-flight could be frozen part-way.
+      Zeroing transition-delay as well as duration means nothing is left queued.
+
+   Nothing here needs `animation-fill-mode` reset: `deal`, `slideIn` and `fade`
+   define only a `from`, so the state they hold at the end IS the element's
+   natural state. The busy spinner on `.btn[aria-busy]` degrades to a static
+   three-quarter ring, which still reads as "working" — owners should keep a text
+   label alongside it rather than relying on the motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
+/* "More contrast" is a token-level job, not a per-rule one: swap the ramp and the
+   hairlines here and every consumer in the file follows, including the ones in
+   sections this pass does not own. The felt ceiling wash goes flat — it is the
+   lightest large surface in the app and therefore the worst background every ink
+   lands on — and the two line tokens cross 3:1 so component edges stop depending
+   on colour alone (WCAG 1.4.11). */
+@media (prefers-contrast: more) {
+  :root {
+    --felt-glow: var(--felt-1);
+    --ink-mute: #ccdbd2;
+    --ink-dim: #e4efe8;
+    --gold: #ffd98a;
+    --gold-deep: #6f5712;
+    --green: #6fdc9f;
+    --amber: #ffc766;
+    --red: #ffb3ad;
+    --danger: #ffb8b2;
+    --blue: #c3e0ff;
+    --line: #ffffff59;
+    --line-strong: #ffffff8c;
+    --btn-border: #ffffffb3;
+    --btn-bg: #ffffff1f;
+  }
+}
+
+/* This felt is drawn entirely from gradients, and forced-colours mode replaces
+   every gradient with Canvas. What survives is text and borders, so anything that
+   carried meaning as a FILL needs a real edge and anything that carried meaning
+   as a COLOUR needs a non-colour twin. These overrides are placed last and name
+   selectors from other sections on purpose: in forced-colours mode they must win
+   over the rules above, and there is nowhere else in this file to put them. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid Highlight !important;
+    box-shadow: none !important;
+  }
+
+  /* The turn countdown ring and the phase track have no border at all. Without
+     one they vanish, and with them goes the only visual answer to "how long do I
+     have left to act". */
+  .ring,
+  .phasebar__track,
+  .phasebar__fill {
+    border: 1px solid CanvasText;
+  }
+
+  /* Whose turn it is lives entirely in .seat--turn's gold border and glow, and
+     both collapse to the same ButtonFace every other seat gets. */
+  .seat--turn {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* Opacity-dimmed controls fade GrayText into Canvas until the label is gone.
+     The disabled palette in the buttons section carries the state without it. */
+  .btn:disabled,
+  .act:disabled,
+  .chip:disabled,
+  .seat--waiting,
+  .hand--bust,
+  .seat__min {
+    opacity: 1;
+  }
+
+  /* The near-white card face and the chip denominations are both information;
+     let the system colours stand but keep the shapes separated. */
+  .card,
+  .chip {
+    border: 1px solid CanvasText;
+  }
+}
 /* ---------------------------------------------------------------------------
    Private-table creation: the stakes form and the owner's unlisted felt.
    Same felt palette as the lobby; these exist because nothing here previously
