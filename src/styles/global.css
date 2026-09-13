@@ -1593,15 +1593,111 @@ code {
   }
 }
 
+/* Reduced motion has to be genuinely safe, not merely fast. Zeroing the two
+   durations left three real breakages:
+
+   1. Card.tsx sets `animationDelay: index * 90ms` inline, and `.card` runs
+      `animation: deal … both` whose only keyframe is `from { opacity: 0 }`. With
+      the duration near zero but the delay intact, fill-mode:both held that
+      invisible start state for the whole stagger — a seven-card layout dealt
+      nothing at all for ~630ms and then popped every card in at once. Zeroing
+      the delay is what actually fixes it.
+   2. `.loader` is `spin 0.85s linear infinite`. An infinite animation at
+      0.001ms per iteration is a busy loop, not a still spinner; capping the
+      iteration count leaves the ring static and lets the compositor idle.
+   3. `.phasebar__fill` transitions `width` and the buttons transition
+      `transform`, so a state change landing mid-flight could be frozen part-way.
+      Zeroing transition-delay as well as duration means nothing is left queued.
+
+   Nothing here needs `animation-fill-mode` reset: `deal`, `slideIn` and `fade`
+   define only a `from`, so the state they hold at the end IS the element's
+   natural state. The busy spinner on `.btn[aria-busy]` degrades to a static
+   three-quarter ring, which still reads as "working" — owners should keep a text
+   label alongside it rather than relying on the motion. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.001ms !important;
-    transition-duration: 0.001ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
+/* "More contrast" is a token-level job, not a per-rule one: swap the ramp and the
+   hairlines here and every consumer in the file follows, including the ones in
+   sections this pass does not own. The felt ceiling wash goes flat — it is the
+   lightest large surface in the app and therefore the worst background every ink
+   lands on — and the two line tokens cross 3:1 so component edges stop depending
+   on colour alone (WCAG 1.4.11). */
+@media (prefers-contrast: more) {
+  :root {
+    --felt-glow: var(--felt-1);
+    --ink-mute: #ccdbd2;
+    --ink-dim: #e4efe8;
+    --gold: #ffd98a;
+    --gold-deep: #6f5712;
+    --green: #6fdc9f;
+    --amber: #ffc766;
+    --red: #ffb3ad;
+    --danger: #ffb8b2;
+    --blue: #c3e0ff;
+    --line: #ffffff59;
+    --line-strong: #ffffff8c;
+    --btn-border: #ffffffb3;
+    --btn-bg: #ffffff1f;
+  }
+}
+
+/* This felt is drawn entirely from gradients, and forced-colours mode replaces
+   every gradient with Canvas. What survives is text and borders, so anything that
+   carried meaning as a FILL needs a real edge and anything that carried meaning
+   as a COLOUR needs a non-colour twin. These overrides are placed last and name
+   selectors from other sections on purpose: in forced-colours mode they must win
+   over the rules above, and there is nowhere else in this file to put them. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 3px solid Highlight !important;
+    box-shadow: none !important;
+  }
+
+  /* The turn countdown ring and the phase track have no border at all. Without
+     one they vanish, and with them goes the only visual answer to "how long do I
+     have left to act". */
+  .ring,
+  .phasebar__track,
+  .phasebar__fill {
+    border: 1px solid CanvasText;
+  }
+
+  /* Whose turn it is lives entirely in .seat--turn's gold border and glow, and
+     both collapse to the same ButtonFace every other seat gets. */
+  .seat--turn {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* Opacity-dimmed controls fade GrayText into Canvas until the label is gone.
+     The disabled palette in the buttons section carries the state without it. */
+  .btn:disabled,
+  .act:disabled,
+  .chip:disabled,
+  .seat--waiting,
+  .hand--bust,
+  .seat__min {
+    opacity: 1;
+  }
+
+  /* The near-white card face and the chip denominations are both information;
+     let the system colours stand but keep the shapes separated. */
+  .card,
+  .chip {
+    border: 1px solid CanvasText;
+  }
+}
 /* ---------------------------------------------------------------------------
    Private-table creation: the stakes form and the owner's unlisted felt.
    Same felt palette as the lobby; these exist because nothing here previously
