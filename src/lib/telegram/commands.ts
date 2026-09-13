@@ -111,33 +111,43 @@ export interface CommandContext {
   user: TelegramWebAppUser;
 }
 
+/**
+ * The 18+ attestation card, shared by `/start` and `/buy`: buying chips with real
+ * Stars is the one action in this bot that must never skip the gate, and the
+ * mini-app path (`POST /api/buyin`) already refuses it with AGE_GATE_REQUIRED.
+ *
+ * `acceptData` is what the button reports back, so the handler can resume what the
+ * player actually asked for instead of dumping them on /start after a /buy.
+ */
+async function sendAgeGate(c: CommandContext, lead: string, acceptData = 'age:accept'): Promise<void> {
+  await c.bot.sendMessage(
+    c.message.chat.id,
+    `${lead}
+${esc(c.cfg.houseWarning)}
+
+Before we go any further, I need one confirmation.`,
+    {
+      reply_markup: {
+        inline_keyboard: [[button('✔ I am 18+ and this is play money', { callback_data: acceptData })]],
+      } satisfies InlineKeyboardMarkup,
+    },
+  );
+}
+
 /** Reply with the Mini App attached, plus an age gate when it is still open. */
 export async function cmdStart(c: CommandContext): Promise<void> {
   const boot = await bootstrapUser(c.env, c.cfg, c.user);
   const { user } = boot;
 
   if (!hasAcceptedAge(user)) {
-    await c.bot.sendMessage(
-      c.message.chat.id,
-      `<b>JackedBot</b> — multiplayer blackjack with <b>play money only</b>.
-${esc(c.cfg.houseWarning)}
-
-Before the tables, I need one confirmation.`,
-      {
-        reply_markup: {
-          inline_keyboard: [[{ text: '✔ I am 18+ and this is play money', callback_data: 'age:accept' }]],
-        } satisfies InlineKeyboardMarkup,
-      },
-    );
+    await sendAgeGate(c, `<b>JackedBot</b> — multiplayer blackjack with <b>play money only</b>.`);
     return;
   }
 
   const lines = [
     `<b>Welcome to JackedBot</b> 🃏`,
     ``,
-    boot.welcomeGranted
-      ? `🎁 Free starter stack: <b>${esc(formatCents(boot.welcomeCents))}</b> in play money — no purchase made.`
-      : `💰 Bankroll: <b>${esc(formatCents(boot.bankrollCents))}</b> in play money.`,
+    chipsLine(boot),
     ``,
     `• 1 ⭐ Star = ${esc(formatCents(c.cfg.centsPerStar))} of chips`,
     `• Chips are <b>play money only</b> — never redeemable for Stars, TON or cash`,
@@ -148,11 +158,8 @@ Before the tables, I need one confirmation.`,
   await c.bot.sendMessage(c.message.chat.id, lines.join('\n'), {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '🃏 Open the lobby', web_app: { url: webAppUrl(c.cfg, '/') } }],
-        [
-          { text: '💵 Buy chips', callback_data: 'buyin' },
-          { text: 'ℹ️ Rules', callback_data: 'help' },
-        ],
+        [lobbyButton(c.cfg)],
+        [buyButton(), button('ℹ️ Rules', { callback_data: 'help' })],
       ],
     } satisfies InlineKeyboardMarkup,
   });
@@ -176,7 +183,8 @@ export async function cmdHelp(c: CommandContext): Promise<void> {
 • 1 ⭐ Star = ${esc(formatCents(c.cfg.centsPerStar))} of chips${c.cfg.welcomeGrantCents > 0 ? `
 • New accounts get a one-time free ${esc(formatCents(c.cfg.welcomeGrantCents))} stack` : ''}
 • <b>Chips are play money.</b> There is no cashout: chips cannot be turned into Stars, TON or currency
-• Out of chips? Rebuy — stacks add up across purchases
+• Out of chips? Rebuy — stacks add up across purchases${c.cfg.bustReliefCents > 0 ? `
+• Bust to $0.00 and the house credits you ${esc(formatCents(c.cfg.bustReliefCents))} automatically, free, so the felt is never a paywall` : ''}
 
 <b>Commands</b>
 /start — open the lobby
@@ -184,10 +192,11 @@ export async function cmdHelp(c: CommandContext): Promise<void> {
 /buy — buy chips with Stars
 /history — your recent hands
 /tables — list open tables
+/newtable — create a private table and invite people to it
 
 <b>Age policy</b>
 18+ only. ${esc(c.cfg.houseWarning)}`,
-    { reply_markup: { inline_keyboard: [[{ text: '🃏 Open the lobby', web_app: { url: webAppUrl(c.cfg, '/') } }]] } },
+    { reply_markup: { inline_keyboard: [[lobbyButton(c.cfg)]] } },
   );
 }
 
@@ -229,14 +238,26 @@ Wagered ${esc(formatCents(summary.wagered_cents))} · net ${esc(formatCents(summ
 /** In-chat Stars purchase. The mini app uses /api/buyin + openInvoice instead. */
 export async function cmdBuy(c: CommandContext): Promise<void> {
   const { user } = await bootstrapUser(c.env, c.cfg, c.user);
+
+  // Real Stars leave a real account here, so the 18+ attestation is not optional.
+  if (!hasAcceptedAge(user)) {
+    await sendAgeGate(c, `<b>Buying chips</b> costs Telegram Stars, so this is the one thing I gate.`, 'age:accept:buy');
+    return;
+  }
+
   const nonce = Math.random().toString(36).slice(2, 10);
   const payload = `buyin:${user.telegram_user_id}:${nonce}`;
+  const { stars } = c.cfg.buyIn;
 
   await c.bot.sendInvoiceStars(c.message.chat.id, {
     title: c.cfg.buyIn.label,
-    description: c.cfg.buyIn.description,
+    // The Stars sheet shows the price but never what it buys, and the description
+    // used to be a fixed sentence that quietly went wrong the moment
+    // STARS_BUY_IN_AMOUNT was not 1. Derive both numbers from the same config the
+    // webhook credits from, so what is advertised is what lands.
+    description: `${c.cfg.buyIn.description} — ${formatCents(stars * c.cfg.centsPerStar)} of chips for ${stars} ⭐`,
     payload,
-    stars: c.cfg.buyIn.stars,
+    stars,
     startParameter: `buy${nonce}`,
   });
 }
@@ -356,7 +377,7 @@ export async function handleCallback(c: { env: Env; cfg: AppConfig; bot: Telegra
     language_code: c.query.from.language_code,
   };
 
-  if (data === 'age:accept') {
+  if (data === 'age:accept' || data === 'age:accept:buy') {
     await bootstrapUser(c.env, c.cfg, user);
     await acceptAgeGate(c.env.DB, user.id, AGE_GATE_STATEMENT);
     // A callback query id is answerable only briefly and only once; a re-tapped old
@@ -365,7 +386,10 @@ export async function handleCallback(c: { env: Env; cfg: AppConfig; bot: Telegra
 // no-op forever. The acknowledgement is cosmetic — never let it break the flow.
 await safeAnswer(c.bot, c.query.id, 'Confirmed — welcome aboard.');
     if (!c.query.message) return;
-    await cmdStart({ env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message, user });
+    const ctx = { env: c.env, cfg: c.cfg, bot: c.bot, message: c.query.message, user };
+    // Resume the action the gate interrupted: /buy must not end at the welcome card.
+    if (data === 'age:accept:buy') await cmdBuy(ctx);
+    else await cmdStart(ctx);
     return;
   }
 
