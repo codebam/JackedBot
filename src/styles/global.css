@@ -26,11 +26,38 @@
   --radius-sm: 9px;
   --shadow: 0 10px 30px #00000059;
   --shadow-soft: 0 4px 14px #0000003d;
+
+  /* ---------------------------------------------------------- touch targets */
+  /* --tap is 44px: the iOS HIG number and WCAG 2.5.5 (AAA). --tap-sm is the
+     compact variant and it is 40px, not the 36px .btn--sm used to hardcode.
+     36px does clear WCAG 2.5.8 (AA, 24px minimum), so this is not a conformance
+     fix — it is a mis-tap fix. The compact size is used almost entirely on the
+     betting row (Undo / Clear / Bet, 7px apart, inside a 15-second turn clock)
+     and on the wallet's buy buttons, where a mis-tap costs chips or fires a real
+     Stars invoice. 40px keeps the variant visibly smaller than --tap while
+     putting 20% more of a thumbprint on target. */
   --tap: 44px;
+  --tap-sm: 40px;
+
   --app-h: 100vh;
   --safe-top: 0px;
   --safe-bottom: 0px;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* ------------------------------------------------------------ button skin */
+  /* A button's edge is "visual information required to identify a user interface
+     component" under WCAG 1.4.11, so it needs 3:1 against the surface beside it.
+     .btn inherited --line-strong (#ffffff33), which measures 1.79:1 over the felt
+     — and .btn--ghost is transparent, so for a ghost button that border was the
+     ONLY thing separating a control from the background. --btn-border is 3.31:1
+     over the lightest surface a button sits on. Decorative card rules keep
+     --line / --line-strong; a card boundary is not a component boundary. */
+  --btn-bg: #ffffff14;
+  --btn-border: #ffffff6e;
+  /* Disabled is a dark recessed well rather than a faded copy of the enabled
+     button. See .btn:disabled below for why the old `opacity: 0.42` had to go. */
+  --btn-bg-disabled: #0000004d;
+  --btn-border-disabled: #ffffff26;
 
   /* ------------------------------------------------------------- focus ring */
   /* Two-tone, so ONE ring works on the dark felt and on the bright gold/green
@@ -381,11 +408,24 @@ code {
   color: #ffe9bd;
 }
 
+/* Neutral variant, and the reason it exists: `.alert` is red text on a red tint,
+   and SessionGate.tsx:189-190 renders it for "Restoring your Telegram session…"
+   and "Signing you in…". Those are in-progress notices wearing an error colour,
+   so the colour contradicts the copy — a first-time player is told something has
+   gone wrong while the app is working normally (WCAG 1.4.1, colour carrying a
+   meaning the text does not have). #dbe8e0 on the #ffffff0a wash measures 7.4:1
+   over the felt-top and 11.6:1 over the mid felt. */
+.alert--pending {
+  background: #ffffff0a;
+  border-color: var(--btn-border);
+  color: #dbe8e0;
+}
+
 /* ----------------------------------------------------------------- buttons */
 .btn {
   appearance: none;
-  border: 1px solid var(--line-strong);
-  background: #ffffff10;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
   color: var(--ink);
   border-radius: var(--radius-sm);
   padding: 0 14px;
@@ -398,24 +438,66 @@ code {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  /* `manipulation`, not the default `auto`: it removes the 300ms double-tap-to-
+     zoom delay on buttons, which is the only thing the viewport meta's
+     `maximum-scale=1` was ever buying. With this in place pinch-zoom can stay
+     available to a low-vision player (WCAG 1.4.4). */
+  touch-action: manipulation;
   transition: transform 0.08s ease, filter 0.15s ease, background 0.15s ease;
+}
+
+/* Pressed feedback. `transform: scale(0.975)` on its own is a 1px move on a 44px
+   button — under a thumb, on a phone held in sunlight, it reads as nothing, and
+   the bright --primary / --gold fills hide it completely. brightness() gives
+   every variant a visible step, up on hover (there is no hover in Telegram's
+   webview, but this file is also served to a plain browser) and down on press. */
+.btn:hover:not(:disabled) {
+  filter: brightness(1.07);
 }
 
 .btn:active:not(:disabled) {
   transform: scale(0.975);
+  filter: brightness(0.94);
 }
 
+/* Disabled. This was `opacity: 0.42`, which dims the label and the fill by the
+   SAME factor, so the two converge instead of separating: measured label-vs-fill
+   1.05:1 on a default .btn, 2.21:1 on .btn--primary and 3.13:1 on .btn--gold,
+   with the label against the page dropping to 3.06:1. WCAG 1.4.3 and 1.4.11 both
+   exempt inactive components, so none of that was technically a failure — but the
+   result was that a player could not read "Sit down" or "Bet $25" to learn what
+   they cannot do yet, and the reason is exactly the thing worth reading.
+
+   Dimming the FILL only, and holding the label at --ink-mute, keeps "greyed out"
+   obvious and puts the text at 6.96:1. The well is dark rather than faded, so a
+   disabled button reads as recessed into the felt instead of as a broken enabled
+   one. This rule sits after the variants on purpose: (0,2,0) beats (0,1,0), so
+   one declaration also retires the bright gradient on a disabled primary or gold
+   button, which the old opacity-only rule could not do. */
 .btn:disabled {
-  opacity: 0.42;
+  background: var(--btn-bg-disabled);
+  border-color: var(--btn-border-disabled);
+  color: var(--ink-mute);
+  box-shadow: none;
+  filter: none;
+  transform: none;
   cursor: not-allowed;
 }
 
+/* The green was #2fa06a -> #1d7d4f with a #04150c label: 5.69:1 on the light
+   stop but only 3.67:1 on the dark one, so the bottom half of every primary
+   button — "Join table", "Sit down", "Bet", "Continue" — was under AA. Lifting
+   both stops keeps the same hue and the same top-to-bottom shading and puts the
+   label at 6.98:1 / 5.10:1. The #3fbd83 border is unchanged: it measures 4.40:1
+   against the felt-top, which is what identifies the component. */
 .btn--primary {
-  background: linear-gradient(180deg, #2fa06a, #1d7d4f);
+  background: linear-gradient(180deg, #37b277, #2a9762);
   border-color: #3fbd83;
   color: #04150c;
 }
 
+/* Unchanged and verified: #2b1d02 on the #f4d089 -> #cf9f3d gradient measures
+   11.12:1 / 6.78:1, and the #f7dfa6 border 6.97:1 against the felt. */
 .btn--gold {
   background: linear-gradient(180deg, #f4d089, #cf9f3d);
   border-color: #f7dfa6;
@@ -431,11 +513,45 @@ code {
 }
 
 .btn--sm {
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: var(--tap-sm);
+  padding: 0 12px;
   font-size: 0.8rem;
 }
 
+/* Shared busy state. There was none: AgeGate, WalletBar, CreateTableForm and
+   PrivateTables each hand-roll it by swapping their label for "Saving…",
+   "Working…", "Creating…" or "Closing…", so the four spellings drift and the
+   button looks live while it is not. Owners set aria-busy={busy} (they already
+   hold that state) and get the spinner, the progress cursor and re-entry
+   protection for free — and can then drop the label swap, because a spinner plus
+   the real label ("Create private table") beats a spinner plus "Creating…".
+
+   The ring is a border, so it costs no image request and no extra element. It is
+   named separately from the table section's `spin` keyframe so this section stays
+   self-contained across the three-way merge. Under prefers-reduced-motion the
+   block above caps its iteration count and it settles as a static three-quarter
+   ring, which still reads as "working" — keep a text label beside it. */
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn[aria-busy="true"]::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  opacity: 0.7;
+  animation: btn-spin 0.7s linear infinite;
+}
+
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 /* --------------------------------------------------------------- age gate */
 .gate {
   position: fixed;
