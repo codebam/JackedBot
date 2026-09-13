@@ -1576,6 +1576,52 @@ code {
   padding: 9px 10px;
 }
 
+/* Per-field rule statement. The relationships between these numbers (max >= min,
+   buy-in >= one min bet, seat min >= min bet or 0) were only ever explained by a
+   rejection after a round trip; stating them beside the field means an owner can
+   get it right the first time. */
+.form__hint {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--ink-mute);
+}
+
+/* Clipboard result line under the invite row. Sits in the flow rather than
+   replacing the button label, so "did that work?" has a full sentence to answer it
+   and the link stays on screen for a manual long-press copy. */
+.form__copied {
+  font-size: 0.76rem;
+  color: var(--ink-dim);
+  margin: 10px 0 0;
+}
+
+.form__url {
+  margin: 6px 0 0;
+}
+
+.form__url code {
+  display: block;
+  padding: 9px 10px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--ink-dim);
+  background: #061410bf;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* The whole point: selectable and scrollable when the clipboard API is not
+     available to this WebView. */
+  user-select: all;
+  -webkit-user-select: all;
+  overflow-wrap: anywhere;
+}
+
+/* A field the server rejected. Drawn on the field, not only in the alert below the
+   presets, because on a phone the soft keyboard covers the bottom of the form. */
+.form__field input[aria-invalid='true'],
+.form__field select[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 .form__field input:focus-visible,
 .form__field select:focus-visible {
   border-color: var(--gold, #d8b45a);
