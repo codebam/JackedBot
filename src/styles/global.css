@@ -301,15 +301,15 @@ code {
    get the same instant reveal. */
 .skip-link {
   position: fixed;
-  top: calc(8px + var(--safe-top));
-  left: 8px;
+  top: calc(var(--space-2) + var(--safe-top));
+  left: var(--space-2);
   z-index: 100;
-  padding: 10px 16px;
+  padding: 10px var(--space-4);
   background: var(--felt-0);
   border: 1px solid var(--focus-ring);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  font-size: 0.8125rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
   opacity: 0;
@@ -336,9 +336,9 @@ code {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
   color: var(--ink);
-  padding: 12px;
-  margin: 0 0 16px;
-  font-size: 0.875rem;
+  padding: var(--space-3);
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
 }
 
 /* -------------------------------------------------------------------- focus */
