@@ -15,7 +15,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { followTelegramStartParam } from '../lib/client/deeplink.ts';
 import type { ComponentChildren } from 'preact';
 import { AgeGate } from './AgeGate.tsx';
-import { api, ApiError } from '../lib/client/api.ts';
+import { api, ApiError, humanError } from '../lib/client/api.ts';
 import { getInitData, isInTelegram, haptic } from '../lib/client/telegram.ts';
 
 interface Session {
@@ -44,13 +44,24 @@ export interface SessionGateProps {
   children?: ComponentChildren;
 }
 
-type Phase = 'checking' | 'gated' | 'ok' | 'no-session';
+/**
+ * `checking` is in flight. The three terminal states used to be one `no-session`,
+ * which rendered the caller's *pending* string - so a plain browser and a rejected
+ * session both said "Restoring your Telegram session..." forever, describing work
+ * that had already finished and failed. They are different situations with
+ * different remedies, so they are different phases.
+ */
+type Phase = 'checking' | 'gated' | 'ok' | 'not-telegram' | 'auth-failed';
 
 export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, starsLabel, pendingNotice, onSession, children }: SessionGateProps) {
   // Start CLOSED. Mounting the overlay optimistically (as this used to) flashed the
   // 18+ dialog at players who had already accepted it, then hid it a moment later.
   const [phase, setPhase] = useState<Phase>(serverResolved && serverAgeAccepted === true ? 'ok' : 'checking');
   const [statement, setStatement] = useState<string>('');
+  /** The server's own reason for a failed session, via humanError. */
+  const [failure, setFailure] = useState<string>('');
+  /** Bumped by the retry button; the boot effect depends on it. */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -67,8 +78,9 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
       // Outside Telegram there is no initData to send; say so rather than
       // spinning on 401s.
       if (!isInTelegram() && !getInitData()) {
-        // A plain browser, not Telegram. Say so once, instead of spinning on 401s.
-        if (alive) setPhase('no-session');
+        // A plain browser, not Telegram. There is no initData to send, so retrying
+        // cannot help and the copy must not imply that it can.
+        if (alive) setPhase('not-telegram');
         return;
       }
       try {
@@ -83,7 +95,15 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
         // 428 is the age gate answering through the API; anything else means the
         // session really is unusable.
         const isGate = e instanceof ApiError && (e.code === 'AGE_GATE_REQUIRED' || e.status === 428);
-        setPhase(isGate ? 'gated' : 'no-session');
+        if (isGate) {
+          setPhase('gated');
+          return;
+        }
+        // Surface the server's own reason rather than inventing one: a stale
+        // initData, a bad hash and a dropped connection need different responses,
+        // and RECOVERABLE in api.ts already words them.
+        setFailure(humanError(e));
+        setPhase('auth-failed');
       }
     }
 
@@ -94,7 +114,7 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   if (phase === 'gated') {
     return (
@@ -114,9 +134,55 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
   // The notice is owned by this component so it can never outlive the check that
   // produced it — a page-level banner keyed on SSR state used to sit there saying
   // "open in Telegram" long after the client had authenticated.
-  if (phase === 'checking' && pendingNotice) return <p class="alert">{pendingNotice}</p>;
-  if (phase === 'no-session' && pendingNotice) return <p class="alert">{pendingNotice}</p>;
-  // 'ok' - and also the no-notice variants of checking/no-session, so a page that
-  // passes no pendingNotice still shows its content rather than a blank screen.
+  //
+  // `pendingNotice` is the opt-in: a page that passes none (the table, which draws
+  // its own connection states) gets its children back instead of a blank screen.
+  const wantsNotice = pendingNotice !== undefined;
+
+  if (wantsNotice && phase === 'checking') {
+    // Gold, not the error red: nothing has gone wrong yet. Announced politely,
+    // because a screen reader user otherwise gets silence and then a page change.
+    return (
+      <p class="alert alert--gold" role="status">
+        {pendingNotice}
+      </p>
+    );
+  }
+
+  if (wantsNotice && phase === 'not-telegram') {
+    // Honest about why retrying is not offered: there is no initData to retry with.
+    return (
+      <p class="alert alert--gold">
+        You are in a regular browser, so Telegram has not signed you in and playing is not possible here. Open JackedBot
+        from @JackedBot inside Telegram. Nothing on this page is broken — it just cannot know who you are.
+      </p>
+    );
+  }
+
+  if (wantsNotice && phase === 'auth-failed') {
+    // Actionable. A failed session used to be indistinguishable from a slow one and
+    // offered nothing to do but close the app; a stale initData or a dropped
+    // connection usually succeeds on a second attempt.
+    return (
+      <p class="alert" role="alert">
+        Could not sign you in{failure ? `: ${failure}` : ''}.{' '}
+        <button
+          type="button"
+          class="btn btn--sm btn--ghost"
+          onClick={() => {
+            // Back to 'checking' first, so the retry is visibly in flight instead of
+            // leaving a stale error on screen until the request lands.
+            setPhase('checking');
+            setAttempt((n) => n + 1);
+          }}
+        >
+          Try again
+        </button>
+      </p>
+    );
+  }
+
+  // 'ok' - and the no-notice variants of every other phase, so a page that passes
+  // no pendingNotice still shows its content rather than a blank screen.
   return <>{children ?? null}</>;
 }
