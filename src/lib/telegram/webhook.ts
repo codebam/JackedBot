@@ -12,10 +12,10 @@
 //     webhook ACK stays fast and Telegram does not back off.
 // =============================================================================
 import { formatCents } from '../../shared/money.ts';
-import { getConfig, type AppConfig } from '../config.ts';
+import { getConfig, miniAppLink, webAppUrl, type AppConfig } from '../config.ts';
 import { creditBuyIn } from '../db/payments.ts';
 import { getUser } from '../db/users.ts';
-import { TelegramApiError, type PreCheckoutQuery, type TelegramBot, type Update } from './api.ts';
+import { TelegramApiError, clipText, esc, type Message, type PreCheckoutQuery, type TelegramBot, type Update } from './api.ts';
 import { BOT_COMMANDS, cmdBalance, cmdBuy, cmdHelp, cmdHistory, cmdNewTable, cmdRefund, cmdStart, cmdTables, handleCallback } from './commands.ts';
 import { handleInlineQuery } from './inline.ts';
 import type { TelegramWebAppUser } from './initData.ts';
@@ -28,6 +28,21 @@ export interface WebhookDeps {
 }
 
 export type WebhookOutcome = { handled: string; detail?: string };
+
+/**
+ * The commands a player is advertised, plus the /buy aliases. `/refund` and
+ * `/commands` are operator-only and deliberately absent: a stranger typing them in a
+ * group should get silence, not a reply that confirms they exist.
+ */
+const CHAT_COMMANDS = new Set([...BOT_COMMANDS.map((c) => `/${c.command}`), '/topup', '/rebuy']);
+
+/** `/start` and `/start@JackedBot` both resolve to `/start`; null for plain text. */
+export function commandName(text: string): string | null {
+  const head = text.trim().split(/\s+/)[0] ?? '';
+  if (!head.startsWith('/')) return null;
+  const cmd = head.toLowerCase().split('@')[0] ?? '';
+  return cmd.length > 1 ? cmd : null;
+}
 
 /** Invoice payload: `buyin:<user_id>:<nonce>`. */
 interface ParsedPayload {
@@ -67,7 +82,15 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
       // Payload does not match the payer: never credit on a mismatch.
       console.error(`payload mismatch charge=${payment.telegram_payment_charge_id} from=${from.id} payload=${payment.invoice_payload}`);
       ctx.waitUntil(
-        bot.sendMessage(from.id, `We could not attach that payment to your account. Contact support and quote <code>${payment.telegram_payment_charge_id}</code>.`).catch(() => undefined),
+        bot
+          // esc(): a charge id we did not generate is interpolated into an HTML
+          // entity, and one unparsable field costs the player the only message that
+          // tells them their Stars went missing.
+          .sendMessage(
+            from.id,
+            `We could not attach that payment to your account. Contact support and quote <code>${esc(payment.telegram_payment_charge_id)}</code>.`,
+          )
+          .catch(() => undefined),
       );
       return { handled: 'successful_payment', detail: 'payload_mismatch' };
     }
@@ -104,7 +127,10 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
           from.id,
           result.alreadyCredited
             ? `✅ That purchase was already credited — no double credit. Balance <b>${formatCents(result.bankrollCents)}</b>.`
-            : `✅ <b>${formatCents(cents)}</b> in play money added (${stars} ⭐). Balance <b>${formatCents(result.bankrollCents)}</b>.\n\n${cfg.houseWarning}`,
+            : `✅ <b>${formatCents(cents)}</b> in play money added (${stars} ⭐). Balance <b>${formatCents(result.bankrollCents)}</b>.\n\n${esc(cfg.houseWarning)}`,
+          // A receipt with nothing to tap is where a purchase goes to die: the
+          // player paid, read a number, and has to find the lobby themselves.
+          { reply_markup: { inline_keyboard: [[{ text: '🃏 Take a seat', web_app: { url: webAppUrl(cfg, '/') } }]] } },
         )
         .catch((e) => console.warn('post-credit message failed', (e as Error).message)),
     );
@@ -121,12 +147,14 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
     return { handled: 'refunded_payment', detail: chargeId };
   }
 
+  const inGroup = groupCommandReply(message, deps);
+  if (inGroup) return inGroup;
+
   // ------------------------------------------------------------------ commands
   if (message?.text && message.from && message.chat?.type === 'private') {
     const user = toTgUser(message.from);
-    const [rawCmd, ...rest] = message.text.trim().split(/\s+/);
-    const cmd = ((rawCmd ?? '').toLowerCase()).split('@')[0] ?? '';
-    const arg = rest.join(' ');
+    const cmd = commandName(message.text) ?? '';
+    const arg = message.text.trim().split(/\s+/).slice(1).join(' ');
 
     const common = { env: deps.env, cfg, bot, message, user };
     switch (cmd) {
@@ -162,7 +190,11 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
         return { handled: '/commands' };
       default:
         if (cmd.startsWith('/')) {
-          await bot.sendMessage(message.chat.id, `Unknown command. Try /start, /balance or /help.`);
+          // clipText: `cmd` is whatever was typed, so a 4 KB "/aaaa…" would otherwise
+          // be echoed back into a message Telegram refuses for length.
+          await bot.sendMessage(message.chat.id, `I do not know <code>${esc(clipText(cmd, 40))}</code>. Here is the way in:`, {
+            reply_markup: { inline_keyboard: [[{ text: '🃏 Open the lobby', web_app: { url: webAppUrl(cfg, '/') } }]] },
+          });
           return { handled: 'unknown_command', detail: cmd };
         }
         // Free text: nudge toward the app instead of ignoring the player.
@@ -185,6 +217,45 @@ export async function routeUpdate(update: Update, deps: WebhookDeps): Promise<We
   }
 
   return { handled: 'ignored' };
+}
+
+/**
+ * Answer a bot command typed in a group, or null when this update is not one.
+ *
+ * Every handler in `routeUpdate` is private-chat-only, so `/start` typed in a group
+ * used to be met with total silence - which reads as a broken bot rather than as
+ * "wrong chat". The inline share flow is what puts this bot in groups in the first
+ * place (so people can @mention it), which makes that a common way to meet it.
+ *
+ * The reply carries a `url` button holding the t.me deep link rather than the
+ * `web_app` button every private-chat reply in this bot uses. `url` is legal in any
+ * chat type and resolves without matching the bot's registered Mini App domain; a
+ * wrong button type is how a whole message disappears (d10702d), and this is the one
+ * reply that cannot lean on the private-chat precedent the others have.
+ */
+function groupCommandReply(message: Message | undefined, deps: WebhookDeps): WebhookOutcome | null {
+  const type = message?.chat?.type;
+  if (!message?.text || (type !== 'group' && type !== 'supergroup')) return null;
+  const cmd = commandName(message.text);
+  if (!cmd || !CHAT_COMMANDS.has(cmd)) return null;
+
+  const { bot, cfg, ctx } = deps;
+  const deepLink = cfg.botUsername ? miniAppLink(cfg, '/') : '';
+  const text = [
+    `<b>JackedBot</b> plays in our private chat — that is where your bankroll, the lobby and Stars purchases live.`,
+    ``,
+    `Chips are <b>play money</b> with no cash value. 18+.`,
+    deepLink ? '' : `Open my profile and press Start to play.`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  ctx.waitUntil(
+    bot
+      .sendMessage(message.chat.id, text, deepLink ? { reply_markup: { inline_keyboard: [[{ text: '🃏 Open JackedBot', url: deepLink }]] } } : {})
+      .catch((e) => console.warn(`group ${cmd} reply failed`, (e as Error).message)),
+  );
+  return { handled: 'command_in_group', detail: cmd };
 }
 
 /**
