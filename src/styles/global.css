@@ -31,6 +31,22 @@
   --safe-top: 0px;
   --safe-bottom: 0px;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  /* ------------------------------------------------------------- focus ring */
+  /* Two-tone, so ONE ring works on the dark felt and on the bright gold/green
+     button fills. No single colour can do both: 3:1 against the felt needs
+     relative luminance >= 0.25, 3:1 against the #f4d089 gold fill needs
+     <= 0.19, and those ranges do not intersect. So the pale-gold outline carries
+     the ring (8.7:1 on the felt) and a 2px felt-0 band (12.8:1 on the gold fill,
+     7.0:1 on the green) sits between it and the component, separating the two if
+     a ring ever lands on a bright surface. Total footprint 5px: every
+     overflow:hidden / overflow:auto ancestor in this file (.tcard, .gate__card,
+     .feed) keeps >= 14px of padding between its edge and any focusable child, so
+     the ring is never clipped. */
+  --focus-ring: #ffe9a8;
+  --focus-ring-inset: #061410;
+  --focus-ring-w: 3px;
+  --focus-ring-gap: 2px;
 }
 
 * {
@@ -48,6 +64,21 @@ body {
   line-height: 1.45;
   -webkit-text-size-adjust: 100%;
   overscroll-behavior-y: none;
+}
+
+/* iOS paints a translucent grey flash over any tapped element; on dark felt it
+   reads as a dirty smudge over the gradient. Tint it with the brand gold. */
+html {
+  -webkit-tap-highlight-color: #f2c66d33;
+}
+
+/* Pins the UA canvas, form controls, scrollbars and pickers to dark regardless of
+   the host theme — see the theme note in src/layouts/Base.astro: this app
+   deliberately does not follow tgWebAppTheme. Keyed on the data-theme attribute
+   so that attribute is load-bearing instead of dead, and repeated in CSS as well
+   as in the <meta> so it survives a shell that drops the meta. */
+[data-theme="felt"] {
+  color-scheme: dark;
 }
 
 body {
@@ -79,6 +110,83 @@ code {
   border-radius: 5px;
 }
 
+/* --------------------------------------------------------------------- a11y */
+/* Screen-reader-only text. Half of the felt is a bare number with no label —
+   the header balance, the dealer total, a hand total — so owners need somewhere
+   to put the words a sighted player gets from layout. clip-path rather than
+   clip so it also works where the deprecated `clip` is gone. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The wallet, the session notice and the age gate all sit above the content a
+   player actually came for. Hidden with opacity (not display:none or
+   visibility:hidden, which would take it out of the tab order and out of the
+   accessibility tree) and revealed on focus. No motion, so reduced-motion users
+   get the same instant reveal. */
+.skip-link {
+  position: fixed;
+  top: calc(8px + var(--safe-top));
+  left: 8px;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--felt-0);
+  border: 1px solid var(--focus-ring);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skip-link:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The skip target takes focus so the reading order moves, but a 5px ring around
+   the whole page would be noise: the content is already on screen. */
+#jb-main:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Shown by the <noscript> block in Base.astro. Without scripting the islands
+   never hydrate, so the honest answer is a plain notice rather than a felt that
+   looks live and is not. */
+.noscript-note {
+  background: #ffffff0a;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  padding: 12px;
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+}
+
+/* -------------------------------------------------------------------- focus */
+/* Every focusable element, not just text inputs. Keyboard and switch-access
+   players previously lost track of position on buttons, on the .tcard__cta join
+   links and on <summary>, because .form__field was the only rule in the file
+   that defined :focus-visible. Specificity is deliberately (0,1,0) so a
+   component can still opt into its own ring, and the box-shadow is the felt-0
+   half of the two-tone ring described above. */
+:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-gap);
+  box-shadow: 0 0 0 var(--focus-ring-gap) var(--focus-ring-inset);
+}
+
 /* ------------------------------------------------------------------ layout */
 .page,
 .lobby {
@@ -86,7 +194,6 @@ code {
   margin: 0 auto;
   padding: calc(14px + var(--safe-top)) 14px calc(24px + var(--safe-bottom));
 }
-
 /* ------------------------------------------------------------------- lobby */
 .lobby__head {
   display: flex;
