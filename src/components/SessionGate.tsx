@@ -96,10 +96,15 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
         // same endpoint race for the mint and only the winner is told. Stash it so the
         // announcement survives whoever won - and survives the age-gate reload, which
         // for a brand-new player is the very next thing that happens.
-        if (s.welcomeGranted && s.welcomeLabel) {
-          stashPendingGrant(`A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`);
-        } else if (s.reliefGranted && s.reliefLabel) {
-          stashPendingGrant(`You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`);
+        // Only when the gate is still open: that is the case where accepting it
+        // reloads the page and takes the announcement with it. Stashing otherwise
+        // would replay it on a later visit.
+        if (!s.ageAccepted) {
+          if (s.welcomeGranted && s.welcomeLabel) {
+            stashPendingGrant(`A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`);
+          } else if (s.reliefGranted && s.reliefLabel) {
+            stashPendingGrant(`You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`);
+          }
         }
         setStatement(s.ageStatement);
         setPhase(s.ageAccepted ? 'ok' : 'gated');

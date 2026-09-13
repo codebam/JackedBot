@@ -209,11 +209,12 @@ export function CreateTableForm({ defaultName }: { defaultName?: string }) {
   ];
 
   return (
-    // noValidate routes every rejection through one styled, focus-managed path
-    // instead of mixing it with the WebView's own unstyled validation bubble. The
-    // `required` attributes stay: with native validation off they no longer block
-    // submit, but they still tell assistive tech which fields are mandatory.
-    <form className="tcard form" onSubmit={submit} noValidate>
+    // Native validation stays on deliberately. It catches the one case the server
+    // words badly - an empty field comes back as "must be whole cent amounts" - and
+    // it catches it instantly, without a round trip. Everything native validation
+    // cannot express (max < min, a buy-in that covers no bet) is routed to its field
+    // from the server's own error code in submit().
+    <form className="tcard form" onSubmit={submit}>
       <h2 className="lobby__h2">Private table</h2>
       <p className="lobby__sub">Unlisted, invite-only. Your own bets and buy-in.</p>
 

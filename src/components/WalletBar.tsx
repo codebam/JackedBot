@@ -31,6 +31,7 @@ export interface WalletBarProps {
 
 interface Session {
   bankrollCents: number;
+  ageAccepted?: boolean;
   needsRebuy?: boolean;
   /** Server-formatted labels for the free credits, so the client never derives them. */
   welcomeGranted?: boolean;
@@ -151,9 +152,11 @@ export function WalletBar({
               : null;
         if (msg) {
           setGrant(msg);
-          // Survive the age-gate reload, which is what actually happens next for a
-          // brand-new player.
-          stashPendingGrant(msg);
+          // Persist only when a reload is actually coming to swallow it - i.e. the
+          // age gate is still open, which for a brand-new player it is. Stashing
+          // unconditionally would replay "a free stack was added" on the player's
+          // next visit to the lobby, long after the chips were spent.
+          if (s.ageAccepted === false) stashPendingGrant(msg);
         }
       } catch {
         // No session, or a plain browser. Leave the balance unknown rather than
