@@ -52,6 +52,35 @@ interface Invoice {
 const POLL_MS = 1_200;
 const POLL_TIMEOUT_MS = 25_000;
 
+/**
+ * Holds a free-credit announcement across the reload the age gate triggers.
+ *
+ * `welcomeGranted` is true only on the /api/session call that actually minted the
+ * grant, and for a brand-new player that call happens BEFORE the 18+ gate - accepting
+ * the gate reloads the page, and the reload's reply reports the grant as already
+ * existing. Without this the one player who most needs to hear "that $20 was free"
+ * is the one who never hears it.
+ */
+const GRANT_KEY = 'jackedbot.pendingGrant';
+
+function readPendingGrant(): string | null {
+  try {
+    const v = sessionStorage.getItem(GRANT_KEY);
+    sessionStorage.removeItem(GRANT_KEY);
+    return v;
+  } catch {
+    return null; // no storage: lose the announcement, never the chips
+  }
+}
+
+export function stashPendingGrant(msg: string): void {
+  try {
+    sessionStorage.setItem(GRANT_KEY, msg);
+  } catch {
+    /* best effort */
+  }
+}
+
 export function WalletBar({
   initialBankrollCents,
   starsPerPurchase = 1,
@@ -91,17 +120,40 @@ export function WalletBar({
   // grant. bootstrapUser is idempotent, so this is safe to race with SessionGate's
   // own call.
   useEffect(() => {
-    if (initialBankrollCents !== null && initialBankrollCents !== undefined) return;
+    // Runs even when SSR supplied a balance. The grant flags are the reason: they
+    // come only from this reply, and skipping the call on the SSR fast path is how a
+    // first-time player would end up watching $20.00 appear with nothing saying it
+    // was free. SSR's number still paints first, so there is no flash of a dash.
     let alive = true;
+    // A grant observed on an earlier load (typically the one before the age gate
+    // reloaded the page) is announced first and takes precedence.
+    const pending = readPendingGrant();
+    if (pending) setGrant(pending);
     void (async () => {
       try {
         const s = await api<Session>('/api/session', { method: 'POST', body: {} });
         if (!alive) return;
         apply(s.bankrollCents);
-        if (s.welcomeGranted && s.welcomeLabel) {
-          setGrant(`A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`);
-        } else if (s.reliefGranted && s.reliefLabel) {
-          setGrant(`You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`);
+        if (pending) return;
+        // SessionGate races this same POST, and `welcomeGranted` is true for exactly
+        // one of us. If it won the mint it will have stashed the announcement, so
+        // check before concluding there is nothing to say.
+        const stashed = readPendingGrant();
+        if (stashed) {
+          setGrant(stashed);
+          return;
+        }
+        const msg =
+          s.welcomeGranted && s.welcomeLabel
+            ? `A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`
+            : s.reliefGranted && s.reliefLabel
+              ? `You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`
+              : null;
+        if (msg) {
+          setGrant(msg);
+          // Survive the age-gate reload, which is what actually happens next for a
+          // brand-new player.
+          stashPendingGrant(msg);
         }
       } catch {
         // No session, or a plain browser. Leave the balance unknown rather than

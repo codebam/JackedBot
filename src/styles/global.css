@@ -577,6 +577,13 @@ code {
   margin: 0;
 }
 
+/* 44px, not the 36px .btn--sm default: these are the real-money controls, and a
+   mistap on a purchase is the most expensive mistap in the app. Scoped here rather
+   than in the shared buttons block, which other surfaces own. */
+.wallet__actions .btn--sm {
+  min-height: var(--tap);
+}
+
 .wallet__note,
 .wallet__rebuy {
   font-size: 0.78rem;
@@ -1725,4 +1732,11 @@ code {
   margin: 0;
   font-size: 0.82rem;
   color: var(--ink-dim);
+}
+
+/* Same reasoning as the wallet: Close is destructive and the stake presets set four
+   money fields at once, so neither belongs below the 44px target. */
+.tcard__actions .btn--sm,
+.form__row .btn--sm {
+  min-height: var(--tap);
 }

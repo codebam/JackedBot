@@ -15,6 +15,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { followTelegramStartParam } from '../lib/client/deeplink.ts';
 import type { ComponentChildren } from 'preact';
 import { AgeGate } from './AgeGate.tsx';
+import { stashPendingGrant } from './WalletBar.tsx';
 import { api, ApiError, humanError } from '../lib/client/api.ts';
 import { getInitData, isInTelegram, haptic } from '../lib/client/telegram.ts';
 
@@ -23,6 +24,10 @@ interface Session {
   ageAccepted: boolean;
   ageStatement: string;
   welcomeGranted: boolean;
+  /** Server-formatted, so the client never derives a money figure. */
+  welcomeLabel?: string;
+  reliefGranted?: boolean;
+  reliefLabel?: string;
   needsRebuy?: boolean;
 }
 
@@ -87,6 +92,15 @@ export function SessionGate({ serverResolved, serverAgeAccepted, houseWarning, s
         const s = await api<Session>('/api/session', { method: 'POST', body: {} });
         if (!alive) return;
         onSession?.(s);
+        // WalletBar owns announcing free chips, but this call and its own POST to the
+        // same endpoint race for the mint and only the winner is told. Stash it so the
+        // announcement survives whoever won - and survives the age-gate reload, which
+        // for a brand-new player is the very next thing that happens.
+        if (s.welcomeGranted && s.welcomeLabel) {
+          stashPendingGrant(`A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`);
+        } else if (s.reliefGranted && s.reliefLabel) {
+          stashPendingGrant(`You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`);
+        }
         setStatement(s.ageStatement);
         setPhase(s.ageAccepted ? 'ok' : 'gated');
         if (!s.ageAccepted) haptic('light');
