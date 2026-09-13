@@ -18,11 +18,15 @@ import { getConfig } from '../lib/config.ts';
 import { normalizeInitData } from '../lib/auth.ts';
 import { validateInitData } from '../lib/telegram/initData.ts';
 import { bootstrapUser } from '../lib/telegram/session.ts';
+import { formatCents } from '../shared/money.ts';
 
 export const prerender = false;
 
 const cfg = getConfig(env as unknown as Env, Astro.request.url);
-const starsLabel = `${cfg.buyIn.stars} ⭐ → ${cfg.centsPerStar / 100} dollars of chips`;
+// Same wording as the lobby, via the one sanctioned formatter. The previous
+// template divided cents by 100 by hand and produced "1 ⭐ → 10 dollars of
+// chips" - an unformatted number in a sentence about money.
+const starsLabel = `${cfg.buyIn.stars} ⭐ → ${formatCents(cfg.centsPerStar)} of chips`;
 
 // Fast path only, exactly as on /: Telegram passes initData to the WebApp client
 // object, so SSR usually has nothing and SessionGate resolves it in the browser.

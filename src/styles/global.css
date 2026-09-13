@@ -111,19 +111,6 @@ code {
   font-size: 0.82rem;
 }
 
-.lobby__welcome {
-  background: linear-gradient(90deg, #f2c66d22, #f2c66d0a);
-  border: 1px solid #f2c66d44;
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 0.88rem;
-  margin: 0 0 14px;
-}
-
-.lobby__welcome b {
-  color: var(--gold);
-}
-
 .lobby__h2 {
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -255,6 +242,43 @@ code {
   font-size: 0.74rem;
   color: var(--ink-mute);
   margin-top: 10px;
+}
+
+/* "Your private tables" is a section INSIDE <main class="lobby">, so it must not
+   carry the .lobby class itself. That re-applied the page's max-width and its
+   `calc(14px + var(--safe-top))` / `calc(24px + var(--safe-bottom))` padding a
+   second time: the private cards sat 14px in from the public ones above them and a
+   whole extra safe-area inset opened up in the middle of the lobby. */
+.lobby__private {
+  margin: 6px 0 0;
+}
+
+/* Confirmation that a destructive tap landed. Closing a table removed its row, and
+   the row was the only evidence anything had happened. */
+.lobby__closed {
+  background: #48d18a1a;
+  border: 1px solid #48d18a4d;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  color: #cdf3df;
+  margin: 0 0 12px;
+}
+
+/* Inline retry inside an .alert. Underlined so it reads as a control, padded to a
+   44px hit area without changing the paragraph's baseline. */
+.lobby__retry {
+  appearance: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 12px 6px;
+  margin: 0 -6px;
 }
 
 /* ------------------------------------------------------------------ alerts */
@@ -424,14 +448,45 @@ code {
 }
 
 .gate__confirm input {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
 }
 
+.gate__confirm input:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Errors were styled but never announced; role="alert" is in the component. */
 .gate__error {
   color: var(--danger);
   font-size: 0.82rem;
+  margin: 0 0 10px;
+}
+
+/* The panel takes focus on open so a keyboard user starts inside the dialog rather
+   than at the top of the page behind it. It is a container, not a control, so it
+   gets no focus ring of its own. */
+.gate__card:focus {
+  outline: none;
+}
+
+/* Why "enter" is greyed out. Without this the only cue was a disabled button, which
+   on a legal gate reads as a page that failed to load. */
+.gate__why {
+  font-size: 0.78rem;
+  color: var(--amber);
+  margin: 0 0 10px;
+}
+
+/* Kept in the DOM (aria-describedby still points at it) but out of the way once the
+   box is ticked or an error has taken over the explanation. */
+.gate__why--done {
+  color: var(--ink-mute);
 }
 
 /* ----------------------------------------------------------------- wallet */
@@ -468,6 +523,10 @@ code {
   font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
   color: var(--gold);
+  /* Reserves room for a real figure. The balance is fetched, so it paints as an em
+     dash first; without this the header reflows sideways when the number lands. */
+  min-width: 5.5ch;
+  display: inline-block;
 }
 
 .wallet__tag {
@@ -486,6 +545,37 @@ code {
   flex-wrap: wrap;
 }
 
+/* What a purchase delivers, on screen before Telegram's sheet opens. Small and
+   quiet, but always present: this is the line that stops a Stars purchase reading
+   as a deposit you can get back. */
+.wallet__terms {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--ink-mute);
+  margin: 0;
+}
+
+/* The free-credit announcement. WalletBar owns it rather than the page, because the
+   grant is reported by the /api/session reply and only the client ever sees that.
+   Replaces the .lobby__welcome banner the lobby used to render from SSR identity,
+   which is to say from nothing. */
+.wallet__grant {
+  background: linear-gradient(90deg, #f2c66d22, #f2c66d0a);
+  border: 1px solid #f2c66d44;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 0.78rem;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* 44px, not the 36px .btn--sm default: these are the real-money controls, and a
+   mistap on a purchase is the most expensive mistap in the app. Scoped here rather
+   than in the shared buttons block, which other surfaces own. */
+.wallet__actions .btn--sm {
+  min-height: var(--tap);
+}
+
 .wallet__note,
 .wallet__rebuy {
   font-size: 0.78rem;
@@ -495,6 +585,10 @@ code {
 
 .wallet__rebuy {
   color: var(--amber);
+}
+
+.wallet__rebuy b {
+  color: #ffd9a8;
 }
 
 .pill {
@@ -1689,6 +1783,52 @@ code {
   padding: 9px 10px;
 }
 
+/* Per-field rule statement. The relationships between these numbers (max >= min,
+   buy-in >= one min bet, seat min >= min bet or 0) were only ever explained by a
+   rejection after a round trip; stating them beside the field means an owner can
+   get it right the first time. */
+.form__hint {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--ink-mute);
+}
+
+/* Clipboard result line under the invite row. Sits in the flow rather than
+   replacing the button label, so "did that work?" has a full sentence to answer it
+   and the link stays on screen for a manual long-press copy. */
+.form__copied {
+  font-size: 0.76rem;
+  color: var(--ink-dim);
+  margin: 10px 0 0;
+}
+
+.form__url {
+  margin: 6px 0 0;
+}
+
+.form__url code {
+  display: block;
+  padding: 9px 10px;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  color: var(--ink-dim);
+  background: #061410bf;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* The whole point: selectable and scrollable when the clipboard API is not
+     available to this WebView. */
+  user-select: all;
+  -webkit-user-select: all;
+  overflow-wrap: anywhere;
+}
+
+/* A field the server rejected. Drawn on the field, not only in the alert below the
+   presets, because on a phone the soft keyboard covers the bottom of the form. */
+.form__field input[aria-invalid='true'],
+.form__field select[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
 .form__field input:focus-visible,
 .form__field select:focus-visible {
   border-color: var(--gold, #d8b45a);
@@ -1707,4 +1847,38 @@ code {
 
 .tcard__actions .btn--primary {
   flex: 1;
+}
+
+
+/* Destructive variant, used only by the close-table confirmation below. The other
+   .btn-- modifiers live under the buttons banner; this one belongs to this block
+   because nothing else on the site destroys a record. */
+.btn--danger {
+  background: linear-gradient(180deg, #e8564f, #b23a34);
+  border-color: #f0857f;
+  color: #fff4f3;
+}
+
+/* Second step of closing a private table. Replaces the card's action row in place,
+   so the consequence is stated where the owner was already looking rather than in a
+   native dialog a Telegram WebView is free to suppress. */
+.tcard__confirm {
+  margin-top: auto;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #e8564f40;
+  padding-top: 12px;
+}
+
+.tcard__confirm-text {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+}
+
+/* Same reasoning as the wallet: Close is destructive and the stake presets set four
+   money fields at once, so neither belongs below the 44px target. */
+.tcard__actions .btn--sm,
+.form__row .btn--sm {
+  min-height: var(--tap);
 }

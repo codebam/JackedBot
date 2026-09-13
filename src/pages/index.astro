@@ -12,7 +12,7 @@ import { validateInitData } from '../lib/telegram/initData.ts';
 import { bootstrapUser } from '../lib/telegram/session.ts';
 import { ensureDefaultTables, listLobbyTables } from '../lib/db/tablesRepo.ts';
 import { formatCents } from '../shared/money.ts';
-import type { LobbyTable } from '../shared/protocol.ts';
+import type { LobbyTable, Phase } from '../shared/protocol.ts';
 
 const cfg = getConfig(env as unknown as Env, Astro.request.url);
 
@@ -49,6 +49,20 @@ try {
   console.error('lobby SSR preview failed', (e as Error).message);
 }
 
+/**
+ * Player-facing words for the felt's phase enum. `t.phase.toLowerCase()` used to
+ * reach the screen verbatim, so a card read "player_turns" - an underscored
+ * machine token where a person expects "Players acting".
+ */
+const PHASE_LABEL: Record<Phase, string> = {
+  BETTING: 'Betting open',
+  DEALING: 'Dealing',
+  PLAYER_TURNS: 'Players acting',
+  DEALER_TURN: 'Dealer acting',
+  SETTLEMENT: 'Paying out',
+  IDLE: 'Waiting',
+};
+
 const starsLabel = formatCents(cfg.centsPerStar);
 // Handed to the islands so the very first client render already has a session to
 // offer, instead of waiting on a round trip to /api/session.
@@ -63,15 +77,20 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
         <p class="lobby__sub">Multiplayer blackjack · play money only</p>
       </div>
       {
-        me ? (
-          <WalletBar
-            client:load
-            initialBankrollCents={me.bankrollCents}
-            starsPerPurchase={cfg.buyIn.stars}
-            centsPerStar={cfg.centsPerStar}
-            compact
-          />
-        ) : null
+        /* Always rendered. This was gated on `me`, which is SSR identity - and SSR
+           cannot see initData on a real Mini App launch (the same false negative
+           behind ded99de, 25fa085 and 5c90559). So for actual players the lobby had
+           no bankroll and no buy button at all, while "How the money works" below
+           told them to "buy with the button above". The island fetches its own
+           balance when SSR has nothing to hand it. */
+        <WalletBar
+          client:load
+          initialBankrollCents={me ? me.bankrollCents : null}
+          starsPerPurchase={cfg.buyIn.stars}
+          centsPerStar={cfg.centsPerStar}
+          purchaseNote={cfg.buyIn.description}
+          compact
+        />
       }
     </header>
 
@@ -90,18 +109,11 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
     }
 
     {
-      me && !me.ageAccepted ? (
-        <p class="lobby__welcome">One tap: confirm you are 18+ and this is play money.</p>
-      ) : null
-    }
-
-    {
-      me?.welcomeGranted ? (
-        <p class="lobby__welcome" role="status">
-          🎁 A free <b>{formatCents(cfg.welcomeGrantCents)}</b> starter stack is in your wallet — that's two Stars' worth of chips.
-          No purchase was made, and it can't be cashed out.
-        </p>
-      ) : null
+      /* Neither the age-gate nudge nor the welcome-grant banner is rendered from
+         `me` any more. Both are identity states, SSR cannot see identity, and both
+         are now owned by the component that can: SessionGate puts the AgeGate up
+         (covering this line entirely), and WalletBar announces the starter stack
+         from the /api/session reply that actually reports it. */
     }
 
     <!-- Deliberately NOT rendered: see the SessionGate note above. This banner was
@@ -113,14 +125,18 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
       <h2 class="lobby__h2">Open tables</h2>
       {
         tables.length === 0 ? (
-          <p class="lobby__empty">No tables yet. They appear as soon as the database is migrated.</p>
+          <p class="lobby__empty">
+            No open tables right now. Create a private one below and invite your group — it takes about ten seconds.
+          </p>
         ) : (
           <ul class="tcards">
             {tables.map((t) => (
               <li class={`tcard tcard--${t.phase}`} data-open={t.openSeats > 0}>
                 <div class="tcard__top">
                   <h3>{t.name}</h3>
-                  <span class={`tbadge tbadge--${t.status}`}>{t.status === 'open' ? t.phase.toLowerCase() : t.status}</span>
+                  <span class={`tbadge tbadge--${t.status}`}>
+                    {t.status === 'open' ? PHASE_LABEL[t.phase] : t.status === 'closing' ? 'Closing' : 'Closed'}
+                  </span>
                 </div>
 
                 <div class="tcard__stats">
@@ -140,25 +156,37 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
                     <span class="k">Buy-in</span>
                     <b>{formatCents(t.buyInCents)}</b>
                   </div>
-                  {t.preview?.dealerUpCard !== null && t.preview?.dealerUpCard !== undefined ? (
-                    <div>
-                      <span class="k">Pot</span>
-                      <b>{formatCents(t.preview.potCents)}</b>
-                    </div>
-                  ) : null}
+                  {
+                    /* Not a "pot". Blackjack has no pot: preview.potCents is the sum of
+                       every seat's committed wager on the hand in progress (tablesRepo
+                       adds up snapshot.seats[].committedCents), and it is only rendered
+                       while the dealer has an up card, i.e. while a hand is live. */
+                    t.preview?.dealerUpCard !== null && t.preview?.dealerUpCard !== undefined ? (
+                      <div>
+                        <span class="k">In play</span>
+                        <b>{formatCents(t.preview.potCents)}</b>
+                      </div>
+                    ) : null
+                  }
                 </div>
 
                 {t.minBankrollCents > 0 && me && me.bankrollCents < t.minBankrollCents ? (
                   <p class="tcard__gate">Needs {formatCents(t.minBankrollCents)} on hand — you have {formatCents(me.bankrollCents)}.</p>
                 ) : null}
 
-                <a
-                  class={t.openSeats > 0 ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
-                  href={`/table/${t.id}`}
-                  aria-disabled={t.openSeats === 0}
-                >
-                  {t.openSeats > 0 ? 'Join table' : 'Table full — spectate'}
-                </a>
+                {
+                  /* No aria-disabled here. A full table is still a real destination: the
+                     Table DO keeps a balance warm for viewers without a seat and the felt
+                     offers "Sit down" the moment a chair frees up, so the link works and
+                     announces itself as enabled. aria-disabled on a live <a> lied in both
+                     directions - screen readers said "dimmed" while a tap still navigated. */
+                  <a
+                    class={t.openSeats > 0 ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
+                    href={`/table/${t.id}`}
+                  >
+                    {t.openSeats > 0 ? 'Join table' : 'Table full — watch the hand'}
+                  </a>
+                }
               </li>
             ))}
           </ul>
@@ -170,21 +198,50 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
 
     <section class="lobby__create">
       <a class="btn btn--gold btn--block" href="/new-table">Create a private table</a>
-      <p class="lobby__fine">Your own blinds, buy-in and seats. Invite people with @JackedBot in any group.</p>
+      <p class="lobby__fine">Your own bet limits, buy-in and seats. Invite people with @JackedBot in any group.</p>
     </section>
 
     <section class="lobby__how">
       <h2 class="lobby__h2">How the money works</h2>
       <ol class="lobby__steps">
+        {
+          /* Leads with the question a worried visitor actually has. "Chips are play
+             money" is a statement about the chips; "you cannot lose real money" is
+             the answer to the thing they were wondering. */
+        }
         <li>
-          <b>1 ⭐ = {starsLabel} of chips.</b> Buy with the button above; Telegram handles the payment.
+          <b>Can you lose real money? No.</b> The only thing that ever costs Stars is buying chips, and you choose that
+          yourself. Chips cannot be cashed out, transferred, or turned into a prize — so the most you can lose is the
+          Stars you already decided to spend.
         </li>
         <li>
-          <b>Chips are play money.</b> There is no cashout, no transfer and no prize. They cannot become Stars, TON or currency.
+          <b>1 ⭐ = {starsLabel} of chips.</b> Buy from the wallet at the top of this screen; Telegram handles the payment.
         </li>
-        <li>
-          <b>Out of chips?</b> Buy again — stacks add together across purchases.
-        </li>
+        {
+          /* Both of these are promises the server config decides whether it keeps:
+             WELCOME_GRANT_CENTS and BUST_RELIEF_CENTS can each be 0, which turns
+             them off. Stating them unconditionally would advertise free chips to a
+             deployment that does not give any. */
+          cfg.welcomeGrantCents > 0 ? (
+            <li>
+              <b>New here?</b> Your first visit adds a free <b>{formatCents(cfg.welcomeGrantCents)}</b> starter stack — no
+              purchase and no card needed.
+            </li>
+          ) : null
+        }
+        {
+          cfg.bustReliefCents > 0 ? (
+            <li>
+              <b>Out of chips?</b> Buy again, or just keep playing: busting to $0 credits you{' '}
+              {formatCents(cfg.bustReliefCents)} of play money, so running out is never a paywall. Stacks add together
+              across purchases.
+            </li>
+          ) : (
+            <li>
+              <b>Out of chips?</b> Buy again — stacks add together across purchases.
+            </li>
+          )
+        }
       </ol>
       <p class="lobby__fine">{cfg.houseWarning}</p>
     </section>
