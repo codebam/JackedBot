@@ -14,8 +14,8 @@
 // local removal. No reload: a reload would re-run the lobby's public-table queries
 // to learn something this component already knows.
 // =============================================================================
-import { useEffect, useState } from 'preact/hooks';
-import { api, humanError } from '../lib/client/api.ts';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { api, ApiError, humanError } from '../lib/client/api.ts';
 import { formatCents } from '../shared/money.ts';
 
 interface PrivateTable {
@@ -30,76 +30,156 @@ interface PrivateTable {
   role: 'owner' | 'member';
 }
 
+/**
+ * Failures that legitimately mean "there is no private list to show you".
+ *
+ * A visitor in a plain browser, or a Mini App whose initData has not landed yet,
+ * has no list - and SessionGate already owns saying so. Everything else (a 500, a
+ * dropped connection) is a real failure and must not be dressed up as an empty
+ * list, which is what a blanket `catch` did: an owner whose table disappeared had
+ * no way to tell "I have none" from "the read broke".
+ */
+function isAbsence(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false;
+  return e.status === 401 || e.status === 403 || e.code.startsWith('INIT_DATA') || e.code === 'AGE_GATE_REQUIRED';
+}
+
 export function PrivateTables() {
   const [rows, setRows] = useState<PrivateTable[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  /** Id of the table whose inline "are you sure?" is armed. */
+  const [arming, setArming] = useState('');
+  /** Name of the table just closed, so removing the row still confirms the tap. */
+  const [closedName, setClosedName] = useState('');
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const aliveRef = useRef(true);
 
-  useEffect(() => {
-    let alive = true;
-    api<{ privateTables?: PrivateTable[] }>('/api/tables')
-      .then((r) => {
-        if (alive) setRows(r.privateTables ?? []);
-      })
-      .catch(() => {
-        // No session, or a plain browser. That is the absence of a private-table
-        // list, not an error to shout about - SessionGate reports session state.
-        if (alive) setRows([]);
-      });
-    return () => {
-      alive = false;
-    };
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const r = await api<{ privateTables?: PrivateTable[] }>('/api/tables');
+      if (aliveRef.current) setRows(r.privateTables ?? []);
+    } catch (e) {
+      if (!aliveRef.current) return;
+      setRows([]);
+      if (!isAbsence(e)) setError(humanError(e));
+    }
   }, []);
 
+  useEffect(() => {
+    aliveRef.current = true;
+    void load();
+    return () => {
+      aliveRef.current = false;
+    };
+  }, [load]);
+
+  // Arm a confirmation instead of closing. `window.confirm()` put one tap between
+  // the owner and an irreversible POST, and a native dialog is not guaranteed
+  // inside a Telegram WebView - on a host that suppresses it, the destructive
+  // action would have fired on the first tap with no prompt at all. An inline
+  // second step cannot be suppressed, is reachable by keyboard, and states the
+  // consequence where the owner is looking.
+  function arm(t: PrivateTable) {
+    setClosedName('');
+    setArming(t.id);
+    // Move focus onto the destructive button, so Enter confirms and the row is
+    // operable without a pointer. Without this a keyboard user arms the
+    // confirmation and focus stays behind it, up in the list.
+    requestAnimationFrame(() => confirmRef.current?.focus());
+  }
+
   async function closeTable(t: PrivateTable) {
-    const sure = confirm(
-      `Close “${t.name}”?\n\nNobody will be able to join it again, and it leaves your lobby and the @JackedBot picker. Players already seated keep their seat until they leave, and a hand in progress settles normally.`,
-    );
-    if (!sure) return;
     setBusy(t.id);
     setError('');
     try {
       await api(`/api/tables/${t.id}/close`, { method: 'POST', body: {} });
       setRows((prev) => (prev ?? []).filter((r) => r.id !== t.id));
+      setArming('');
+      // The vanishing row was the only signal that anything happened, and it
+      // vanishes with it - closing your last table looked like the section had
+      // simply failed to load. Say what closed.
+      setClosedName(t.name);
     } catch (e) {
       setError(humanError(e));
+      setArming('');
     } finally {
       setBusy('');
     }
   }
 
   // null = unknown yet. Render nothing rather than an empty-state that flashes and
-  // then fills in.
-  if (!rows || rows.length === 0) return null;
+  // then fills in. Once a closure or an error is being reported we stay mounted,
+  // even if that is what emptied the list.
+  if ((!rows || rows.length === 0) && !closedName && !error) return null;
 
   return (
-    <section class="lobby">
+    <section class="lobby__private">
       <h2 class="lobby__h2">Your private tables</h2>
       <p class="lobby__sub">Unlisted. Share one by typing @JackedBot in a chat and picking it.</p>
-      {error ? <p class="alert">{error}</p> : null}
-      <ul class="tcards">
-        {rows.map((t) => (
-          <li class="tcard" key={t.id}>
-            <div class="tcard__top">
-              <b>{t.name}</b>
-              <span class="badge">{t.role === 'owner' ? 'yours' : 'invited'}</span>
-            </div>
-            <p class="lobby__fine">
-              {formatCents(t.minBetCents)}–{formatCents(t.maxBetCents)} · {t.activeSeats}/{t.seatCount} seated
-            </p>
-            <div class="tcard__actions">
-              <a class="btn btn--primary" href={`/table/${t.id}?invite=1`}>
-                Open table
-              </a>
-              {t.role === 'owner' ? (
-                <button type="button" class="btn btn--ghost btn--sm" disabled={busy === t.id} onClick={() => closeTable(t)}>
-                  {busy === t.id ? 'Closing…' : 'Close'}
-                </button>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {error ? (
+        <p class="alert" role="alert">
+          {error}{' '}
+          <button type="button" class="lobby__retry" onClick={() => void load()}>
+            Try again
+          </button>
+        </p>
+      ) : null}
+      {closedName ? (
+        <p class="lobby__closed" role="status">
+          Closed “{closedName}”. It no longer appears in the lobby or the @JackedBot picker.
+        </p>
+      ) : null}
+      {rows && rows.length > 0 ? (
+        <ul class="tcards">
+          {rows.map((t) => (
+            <li class="tcard" key={t.id}>
+              <div class="tcard__top">
+                <b>{t.name}</b>
+                <span class="badge">{t.role === 'owner' ? 'yours' : 'invited'}</span>
+              </div>
+              <p class="lobby__fine">
+                {formatCents(t.minBetCents)}–{formatCents(t.maxBetCents)} · {t.activeSeats}/{t.seatCount} seated
+              </p>
+              {arming === t.id ? (
+                <div class="tcard__confirm" onKeyDown={(e) => e.key === 'Escape' && setArming('')}>
+                  <p class="tcard__confirm-text" id={`close-${t.id}`}>
+                    Close “{t.name}”? Nobody can join it again, and it leaves your lobby and the @JackedBot picker.
+                    Seated players keep their seat, and a hand in progress settles normally.
+                  </p>
+                  <div class="tcard__actions">
+                    <button
+                      type="button"
+                      ref={confirmRef}
+                      class="btn btn--danger btn--sm"
+                      disabled={busy === t.id}
+                      aria-describedby={`close-${t.id}`}
+                      onClick={() => closeTable(t)}
+                    >
+                      {busy === t.id ? 'Closing…' : 'Close table'}
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--sm" disabled={busy === t.id} onClick={() => setArming('')}>
+                      Keep it
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div class="tcard__actions">
+                  <a class="btn btn--primary" href={`/table/${t.id}?invite=1`}>
+                    Open table
+                  </a>
+                  {t.role === 'owner' ? (
+                    <button type="button" class="btn btn--ghost btn--sm" onClick={() => arm(t)}>
+                      Close
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

@@ -257,6 +257,43 @@ code {
   margin-top: 10px;
 }
 
+/* "Your private tables" is a section INSIDE <main class="lobby">, so it must not
+   carry the .lobby class itself. That re-applied the page's max-width and its
+   `calc(14px + var(--safe-top))` / `calc(24px + var(--safe-bottom))` padding a
+   second time: the private cards sat 14px in from the public ones above them and a
+   whole extra safe-area inset opened up in the middle of the lobby. */
+.lobby__private {
+  margin: 6px 0 0;
+}
+
+/* Confirmation that a destructive tap landed. Closing a table removed its row, and
+   the row was the only evidence anything had happened. */
+.lobby__closed {
+  background: #48d18a1a;
+  border: 1px solid #48d18a4d;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  color: #cdf3df;
+  margin: 0 0 12px;
+}
+
+/* Inline retry inside an .alert. Underlined so it reads as a control, padded to a
+   44px hit area without changing the paragraph's baseline. */
+.lobby__retry {
+  appearance: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  padding: 12px 6px;
+  margin: 0 -6px;
+}
+
 /* ------------------------------------------------------------------ alerts */
 .alert {
   background: #e8564f1a;
@@ -1557,4 +1594,31 @@ code {
 
 .tcard__actions .btn--primary {
   flex: 1;
+}
+
+
+/* Destructive variant, used only by the close-table confirmation below. The other
+   .btn-- modifiers live under the buttons banner; this one belongs to this block
+   because nothing else on the site destroys a record. */
+.btn--danger {
+  background: linear-gradient(180deg, #e8564f, #b23a34);
+  border-color: #f0857f;
+  color: #fff4f3;
+}
+
+/* Second step of closing a private table. Replaces the card's action row in place,
+   so the consequence is stated where the owner was already looking rather than in a
+   native dialog a Telegram WebView is free to suppress. */
+.tcard__confirm {
+  margin-top: auto;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #e8564f40;
+  padding-top: 12px;
+}
+
+.tcard__confirm-text {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
 }
