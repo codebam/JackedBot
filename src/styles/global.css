@@ -548,6 +548,13 @@ code {
   }
 }
 
+.loader__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
 .table__head {
   display: flex;
   align-items: center;
@@ -610,6 +617,31 @@ code {
   color: var(--danger);
 }
 
+/* A dropped socket used to be visible only as the word "reconnecting…" in 0.66rem
+   type. This is the banner that says what happened and offers a way out. */
+.connbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #f0b34a59;
+  background: #f0b34a14;
+}
+
+.connbar__msg {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  color: #ffe2b3;
+}
+
+.connbar__btn {
+  flex: none;
+  min-height: var(--tap);
+  padding: 0 14px;
+}
+
 /* -------------------------------------------------------------- phase bar */
 .phasebar {
   background: linear-gradient(180deg, var(--felt-3), var(--felt-2));
@@ -627,6 +659,11 @@ code {
 
 .phasebar__row strong {
   font-size: 0.95rem;
+  /* Now carries a player name ("Waiting on Alice"), so it has to be able to shrink. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .phasebar__clock {
@@ -852,6 +889,22 @@ code {
   opacity: 0.72;
 }
 
+/* An empty seat during betting is a <button> now. Reset the UA chrome so it looks
+   exactly like the inert seat it replaces, and keep the whole 122px tile tappable. */
+.seat--joinable {
+  appearance: none;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+
+.seat--joinable:active {
+  border-color: var(--gold);
+  background: #f2c66d14;
+}
+
 .seat__head {
   display: flex;
   align-items: center;
@@ -912,6 +965,28 @@ code {
 
 .seat__conn--off {
   color: var(--danger);
+}
+
+/* Turn ownership as *words*, in the slot the connection badge used to occupy: the
+   gold border and glow on .seat--turn were the only signal before, so a
+   colour-blind player could not tell whose turn it was, and the row height does not
+   change when the badge swaps in. */
+.seat__turn {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ffffff1f;
+  color: var(--ink-dim);
+}
+
+.seat__turn--you {
+  background: var(--gold);
+  color: #2b1d02;
 }
 
 .seat__idle {
@@ -1015,6 +1090,12 @@ code {
 .badge--push {
   background: #ffffff1f;
   color: var(--ink-dim);
+}
+
+.badge--now {
+  background: var(--gold);
+  color: #2b1d02;
+  font-weight: 800;
 }
 
 .seat__pot {
@@ -1175,7 +1256,26 @@ code {
 
 .tray__buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
+}
+
+/* .btn--sm is 36px tall; Undo/Clear/Max/Bet are the most-tapped controls on the
+   felt and 36px misses thumbs. Scoped here so the shared button stays untouched. */
+.tray__btn {
+  min-height: var(--tap);
+  padding: 0 12px;
+}
+
+/* Why a chip tap was refused, or why Bet is still dim. The tray used to answer
+   with a haptic buzz only, which is silent for anyone with vibration off. */
+.tray__note {
+  margin: 0;
+  /* Reserved whether or not there is a message, so the tray does not jump by a
+     line the first time a chip tap is refused. */
+  min-height: 1.2em;
+  font-size: 0.76rem;
+  color: var(--amber);
 }
 
 /* --------------------------------------------------------------- controls */
@@ -1190,12 +1290,40 @@ code {
 }
 
 .controls__hint,
-.controls__wait,
-.controls__who {
+.controls__wait {
   font-size: 0.8rem;
   color: var(--ink-mute);
   margin: 0;
   text-align: center;
+}
+
+/* Spans the four-button grid: as a plain grid child this line was squeezed into
+   the first of four columns. */
+.controls__who {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--ink-mute);
+}
+
+.controls__fact b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The on-screen reason a Double or Split is dead. `title=` never shows on touch,
+   which is the only platform anyone plays on. */
+.controls__why {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--amber);
 }
 
 .controls__actions {
@@ -1250,6 +1378,8 @@ code {
 
 .controls__leave {
   justify-self: center;
+  min-height: var(--tap);
+  padding: 0 16px;
 }
 
 /* ------------------------------------------------------------- sheet/feed */
@@ -1352,6 +1482,10 @@ code {
 
 .overlay__card {
   width: min(440px, 100%);
+  /* Six seats with splits overflow a 640px-tall phone; scroll the card, not the
+     page behind the dialog. */
+  max-height: min(82vh, 720px);
+  overflow-y: auto;
   background: linear-gradient(180deg, var(--felt-3), var(--felt-1));
   border: 1px solid var(--line-strong);
   border-radius: 18px;
@@ -1417,6 +1551,22 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+/* Your own line in a list of six: findable without reading every name. */
+.results__row--mine {
+  background: #f2c66d1a;
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.results__you {
+  margin-left: 5px;
+  font-size: 0.6rem;
+  font-style: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold);
 }
 
 .results__cards {
