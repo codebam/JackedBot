@@ -22,8 +22,61 @@
   --blue: #58a6ff;
   --amber: #f0b34a;
   --danger: #ff6b6b;
+
+  /* ------------------------------------------------------------- type scale */
+  /* Nine named steps replacing the 18 ad-hoc rem values this file had drifted to
+     (0.58, 0.6, 0.62, 0.64, 0.66, 0.68, 0.72, 0.74, 0.78, 0.82, 0.86, 0.88, 0.9,
+     0.95, 1.02, 1.12, 1.15, 1.3, 1.35, 1.65). They are declared, not applied:
+     rewriting the declarations belongs to whoever owns the section, and the
+     mapping for each one is in the report that accompanies this branch.
+
+     --text-2xs is a hard floor. The smallest text in the app was .badge at
+     0.58rem = 9.28px and .wallet__tag at 0.62rem = 9.92px. 9px uppercase on a
+     phone held at arm's length outdoors is not legible, and .wallet__tag is the
+     "play money" compliance badge — the one string in the product that has to be
+     readable. 11px is the floor Apple and Material both quote for a reason. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-md: 0.875rem; /* 14px */
+  --text-base: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.3125rem; /* 21px */
+  --text-2xl: 1.625rem; /* 26px */
+  --text-3xl: 1.875rem; /* 30px */
+
+  /* The uppercase micro-labels (SEATS, STAKES, BANKROLL, DEALER STANDS ON ALL
+     17s) are the hardest text in this UI to read, and it is the tracking as much
+     as the size. All-caps removes the word shape that fast reading depends on and
+     letter-spacing widens the gaps that would have carried it; at 0.64rem with
+     0.12em the two effects compound. 12px / 0.06em / 600 keeps the engraved-
+     plaque look the felt wants and stays readable. Weight does more work than
+     size here: a semibold 12px label out-reads a regular 13px one. */
+  --label-size: var(--text-xs);
+  --label-track: 0.06em;
+  --label-weight: 600;
+
+  /* ------------------------------------------------------------ space scale */
+  /* 4px base. The values already in the file cluster on it (4, 5, 6, 7, 8, 9, 10,
+     12, 14, 18, 20, 24) with a handful of off-grid stragglers; these eight cover
+     every gap and padding the design actually uses. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* ------------------------------------------------------------- geometry */
+  /* --radius-lg and --radius-pill name the two values already hardcoded across
+     the file: 18px on .gate__card / .overlay__card, and 999px on every badge,
+     pill, chip count and progress track. */
   --radius: 14px;
   --radius-sm: 9px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
   --shadow: 0 10px 30px #00000059;
   --shadow-soft: 0 4px 14px #0000003d;
 
@@ -39,9 +92,36 @@
   --tap: 44px;
   --tap-sm: 40px;
 
+  /* ------------------------------------------------------- viewport & safe */
+  /* 100vh is the LARGE viewport on mobile: it includes the area behind the
+     browser chrome, so a body sized to it runs past the visible window and the
+     --safe-bottom padding lands off-screen. dvh tracks the viewport that is
+     actually visible; the 100vh line above it is the fallback for engines that
+     predate dvh and is what a pre-JS paint gets. setViewportVars() in
+     src/lib/client/telegram.ts overwrites --app-h with an exact px value from
+     WebApp.viewportHeight once the island hydrates, so this is only the
+     first-paint floor — but on / and /new-table nothing calls it at all, so here
+     it is the whole story. */
   --app-h: 100vh;
+  --app-h: 100dvh;
+
+  /* env() is the CSS-only path and it is the one that actually fires on the lobby
+     and the create-table page: setViewportVars() is called only from GameTable, so
+     / and /new-table never received Telegram's insets and rendered under the
+     notch and over the home indicator. viewport-fit=cover is already in the
+     shell, which is what makes these non-zero. Each is declared twice so an
+     engine without env() keeps 0px instead of invalidating every calc() that
+     reads it; Telegram's own values still win once an island hydrates on the
+     table page, and they are more accurate inside the webview. */
   --safe-top: 0px;
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: 0px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: 0px;
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: 0px;
+  --safe-right: env(safe-area-inset-right, 0px);
+
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
 
   /* ------------------------------------------------------------ button skin */
@@ -219,8 +299,16 @@ code {
 .lobby {
   max-width: 940px;
   margin: 0 auto;
-  padding: calc(14px + var(--safe-top)) 14px calc(24px + var(--safe-bottom));
+  /* On the 4px grid now (--space-4 / --space-6, was a bare 14px / 24px), and the
+     horizontal insets are added as well as the vertical ones: viewport-fit=cover
+     exposes all four, and in landscape a notch or a rounded corner would otherwise
+     eat the gutter on one side. Both ends were already wired to --safe-top /
+     --safe-bottom, but only GameTable ever set them — the env() fallbacks in
+     :root are what make the lobby and /new-table respect them too. */
+  padding: calc(var(--space-4) + var(--safe-top)) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-6) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
 }
+
 /* ------------------------------------------------------------------- lobby */
 .lobby__head {
   display: flex;
