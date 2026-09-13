@@ -12,7 +12,7 @@ import { validateInitData } from '../lib/telegram/initData.ts';
 import { bootstrapUser } from '../lib/telegram/session.ts';
 import { ensureDefaultTables, listLobbyTables } from '../lib/db/tablesRepo.ts';
 import { formatCents } from '../shared/money.ts';
-import type { LobbyTable } from '../shared/protocol.ts';
+import type { LobbyTable, Phase } from '../shared/protocol.ts';
 
 const cfg = getConfig(env as unknown as Env, Astro.request.url);
 
@@ -48,6 +48,20 @@ try {
   // server-side "open inside Telegram" line was always a lie to real players.
   console.error('lobby SSR preview failed', (e as Error).message);
 }
+
+/**
+ * Player-facing words for the felt's phase enum. `t.phase.toLowerCase()` used to
+ * reach the screen verbatim, so a card read "player_turns" - an underscored
+ * machine token where a person expects "Players acting".
+ */
+const PHASE_LABEL: Record<Phase, string> = {
+  BETTING: 'Betting open',
+  DEALING: 'Dealing',
+  PLAYER_TURNS: 'Players acting',
+  DEALER_TURN: 'Dealer acting',
+  SETTLEMENT: 'Paying out',
+  IDLE: 'Waiting',
+};
 
 const starsLabel = formatCents(cfg.centsPerStar);
 // Handed to the islands so the very first client render already has a session to
@@ -120,7 +134,9 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
               <li class={`tcard tcard--${t.phase}`} data-open={t.openSeats > 0}>
                 <div class="tcard__top">
                   <h3>{t.name}</h3>
-                  <span class={`tbadge tbadge--${t.status}`}>{t.status === 'open' ? t.phase.toLowerCase() : t.status}</span>
+                  <span class={`tbadge tbadge--${t.status}`}>
+                    {t.status === 'open' ? PHASE_LABEL[t.phase] : t.status === 'closing' ? 'Closing' : 'Closed'}
+                  </span>
                 </div>
 
                 <div class="tcard__stats">
@@ -140,25 +156,37 @@ const boot: Record<string, unknown> = { initData: rawInit || undefined, me, orig
                     <span class="k">Buy-in</span>
                     <b>{formatCents(t.buyInCents)}</b>
                   </div>
-                  {t.preview?.dealerUpCard !== null && t.preview?.dealerUpCard !== undefined ? (
-                    <div>
-                      <span class="k">Pot</span>
-                      <b>{formatCents(t.preview.potCents)}</b>
-                    </div>
-                  ) : null}
+                  {
+                    /* Not a "pot". Blackjack has no pot: preview.potCents is the sum of
+                       every seat's committed wager on the hand in progress (tablesRepo
+                       adds up snapshot.seats[].committedCents), and it is only rendered
+                       while the dealer has an up card, i.e. while a hand is live. */
+                    t.preview?.dealerUpCard !== null && t.preview?.dealerUpCard !== undefined ? (
+                      <div>
+                        <span class="k">In play</span>
+                        <b>{formatCents(t.preview.potCents)}</b>
+                      </div>
+                    ) : null
+                  }
                 </div>
 
                 {t.minBankrollCents > 0 && me && me.bankrollCents < t.minBankrollCents ? (
                   <p class="tcard__gate">Needs {formatCents(t.minBankrollCents)} on hand — you have {formatCents(me.bankrollCents)}.</p>
                 ) : null}
 
-                <a
-                  class={t.openSeats > 0 ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
-                  href={`/table/${t.id}`}
-                  aria-disabled={t.openSeats === 0}
-                >
-                  {t.openSeats > 0 ? 'Join table' : 'Table full — spectate'}
-                </a>
+                {
+                  /* No aria-disabled here. A full table is still a real destination: the
+                     Table DO keeps a balance warm for viewers without a seat and the felt
+                     offers "Sit down" the moment a chair frees up, so the link works and
+                     announces itself as enabled. aria-disabled on a live <a> lied in both
+                     directions - screen readers said "dimmed" while a tap still navigated. */
+                  <a
+                    class={t.openSeats > 0 ? 'btn btn--primary tcard__cta' : 'btn btn--ghost tcard__cta'}
+                    href={`/table/${t.id}`}
+                  >
+                    {t.openSeats > 0 ? 'Join table' : 'Table full — watch the hand'}
+                  </a>
+                }
               </li>
             ))}
           </ul>
