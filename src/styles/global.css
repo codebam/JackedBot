@@ -564,6 +564,19 @@ code {
   margin: 0;
 }
 
+/* The free-credit announcement. Same gold treatment .lobby__welcome had, kept here
+   because WalletBar now owns it: the grant is reported by the /api/session reply,
+   which only the client ever sees. */
+.wallet__grant {
+  background: linear-gradient(90deg, #f2c66d22, #f2c66d0a);
+  border: 1px solid #f2c66d44;
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+  font-size: 0.78rem;
+  color: var(--ink);
+  margin: 0;
+}
+
 .wallet__note,
 .wallet__rebuy {
   font-size: 0.78rem;

@@ -11,7 +11,15 @@ import { haptic, openInvoice, isInTelegram } from '../lib/client/telegram.ts';
 import { formatCents } from '../shared/money.ts';
 
 export interface WalletBarProps {
-  initialBankrollCents: number;
+  /**
+   * SSR's balance, when SSR could see initData. Usually it cannot - Telegram hands
+   * initData to the WebApp client object, not the URL - so this is a fast path, not
+   * a requirement. When absent the bar fetches its own balance, because the lobby
+   * used to render this component only if SSR resolved an identity, which left real
+   * players with no bankroll, no buy button, and a "How the money works" section
+   * pointing at a button that was not there.
+   */
+  initialBankrollCents?: number | null;
   starsPerPurchase?: number;
   centsPerStar?: number;
   /** Server's own one-line description of what a purchase delivers. */
@@ -23,8 +31,12 @@ export interface WalletBarProps {
 
 interface Session {
   bankrollCents: number;
-  welcomeGranted?: boolean;
   needsRebuy?: boolean;
+  /** Server-formatted labels for the free credits, so the client never derives them. */
+  welcomeGranted?: boolean;
+  welcomeLabel?: string;
+  reliefGranted?: boolean;
+  reliefLabel?: string;
 }
 
 /** POST /api/buyin's reply. `disclaimer` and `payload` are both meant to be shown. */
@@ -48,7 +60,11 @@ export function WalletBar({
   onBankroll,
   compact = false,
 }: WalletBarProps) {
-  const [bankroll, setBankroll] = useState(initialBankrollCents);
+  // null = not known yet. Distinct from 0 on purpose: rendering $0.00 before the
+  // fetch lands would be a false balance AND would fire the out-of-chips copy at a
+  // player who has chips.
+  const [bankroll, setBankroll] = useState<number | null>(initialBankrollCents ?? null);
+  const [grant, setGrant] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -69,6 +85,35 @@ export function WalletBar({
     [onBankroll],
   );
 
+  // Bootstrap on mount when SSR could not supply a balance. POST (not GET) because
+  // its reply carries the welcome/relief labels, and de5dfb8's whole point was that
+  // a balance moving to $10 with no explanation reads as a bug or an unauthorised
+  // grant. bootstrapUser is idempotent, so this is safe to race with SessionGate's
+  // own call.
+  useEffect(() => {
+    if (initialBankrollCents !== null && initialBankrollCents !== undefined) return;
+    let alive = true;
+    void (async () => {
+      try {
+        const s = await api<Session>('/api/session', { method: 'POST', body: {} });
+        if (!alive) return;
+        apply(s.bankrollCents);
+        if (s.welcomeGranted && s.welcomeLabel) {
+          setGrant(`A free ${s.welcomeLabel} starter stack was added to your wallet. No purchase was made.`);
+        } else if (s.reliefGranted && s.reliefLabel) {
+          setGrant(`You were out of chips, so the house added ${s.reliefLabel} of play money to keep you at the table.`);
+        }
+      } catch {
+        // No session, or a plain browser. Leave the balance unknown rather than
+        // showing $0.00; SessionGate owns explaining the session state.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       const s = await api<Session>('/api/session', { method: 'GET' });
@@ -88,7 +133,10 @@ export function WalletBar({
     setBusy(true);
     setNote(null);
     haptic('light');
-    const before = bankroll;
+    // Establish the baseline the credit is measured against. If the balance was
+    // still unknown, read it first: guessing 0 would let waitForCredit report the
+    // player's entire stack as the amount this purchase added.
+    const before = bankroll ?? (await refresh())?.bankrollCents ?? 0;
     let inv: Invoice;
     try {
       inv = await api<Invoice>('/api/buyin', { method: 'POST', body: { stars } });
@@ -143,17 +191,19 @@ export function WalletBar({
   }
 
   useEffect(() => {
-    if (initialBankrollCents !== undefined) setBankroll(initialBankrollCents);
+    if (initialBankrollCents !== undefined && initialBankrollCents !== null) setBankroll(initialBankrollCents);
   }, [initialBankrollCents]);
 
-  const broke = bankroll <= 0;
+  const broke = bankroll !== null && bankroll <= 0;
 
   return (
     <div class={compact ? 'wallet wallet--compact' : 'wallet'}>
       <div class="wallet__balance">
         <span class="wallet__label">Bankroll</span>
         <strong class="wallet__amount" aria-live="polite">
-          {formatCents(bankroll)}
+          {/* An em dash, not $0.00: the balance is not known yet, and a number here
+              would be invented. Reserves the same width so nothing shifts. */}
+          {bankroll === null ? '—' : formatCents(bankroll)}
         </strong>
         <span class="wallet__tag">play money</span>
       </div>
@@ -173,6 +223,12 @@ export function WalletBar({
           only inside it. This is the server's own wording (cfg.buyIn.description),
           so the client is not authoring its own description of a real charge. */}
       {purchaseNote ? <p class="wallet__terms">{purchaseNote}</p> : null}
+
+      {grant ? (
+        <p class="wallet__grant" role="status">
+          🎁 {grant} It cannot be cashed out.
+        </p>
+      ) : null}
 
       {note ? (
         <p class="wallet__note" role="status">
